@@ -6,24 +6,50 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  email: {                          
+  email: {                     
     type: String,
     required: true,
     lowercase: true,
     trim: true
   },
-  name: {                           // ← ADD THIS (optional)
+  name: {                        // ← Added name field (required for onboarding)
     type: String,
     default: 'User'
   },
+  profession: {                  // ← New field added
+    type: String,
+    default: null
+  },
+  investmentGoals: {             // ← New field added
+    type: String,
+    default: null
+  },
+  riskAppetite: {               // ← Optional but useful
+    type: String,
+    enum: ['Low', 'Medium', 'High'],
+    default: 'Medium'
+  },
+  age: {                        // ← Optional / Future
+    type: Number,
+    default: null
+  },
+  annualIncome: {               // ← Optional / Future
+    type: Number,
+    default: null
+  },
+  investmentExperience: {       // ← Optional / Future
+    type: String,
+    enum: ['Beginner', 'Intermediate', 'Expert'],
+    default: 'Beginner'
+  },
   firstInvestmentDate: {
     type: Date,
-    required: true
+    default: null        // changed required to default null (safer)
   },
-  notifications: {                  // ← ADD THIS
+  notifications: {              // Optional notification settings
     email: {
       type: Boolean,
-      default: true                 // Email notifications ON by default
+      default: true           // On by default
     }
   }
 }, { 
