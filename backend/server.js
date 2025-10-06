@@ -12,6 +12,7 @@ import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import userRoutes from "./routes/userRoutes.js";
 import investmentRoutes from "./routes/investmentRoutes.js";
 import portfolioRoutes from './routes/portfolioRoutes.js';
+import marketRoutes from './routes/marketRoutes.js';
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ dotenv.config();
 app.use("/api/users", userRoutes);
 app.use("/api/investments", investmentRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/market', marketRoutes);
 
 // 404 handler (must be AFTER all routes)
 app.use(notFound);
