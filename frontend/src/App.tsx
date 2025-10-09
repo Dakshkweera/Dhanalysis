@@ -11,6 +11,8 @@ import Investments from './pages/Investments';
 import Reports from './pages/Reports';
 import AI from './pages/AI';
 import Settings from './pages/Settings';
+import './styles/ticker.css';
+
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);

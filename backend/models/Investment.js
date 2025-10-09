@@ -32,6 +32,15 @@ const investmentSchema = new mongoose.Schema({
     type: Date, 
     required: true 
   },
+  isProcessed: {  // ← NEW FIELD
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  processedAt: {  // ← OPTIONAL: Track when it was processed
+    type: Date,
+    default: null
+  },
 }, { timestamps: true });
 
 // Compound index for efficient user + symbol queries

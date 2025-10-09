@@ -1,0 +1,43 @@
+/* Ticker Strip Animation */
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-container {
+  overflow: hidden;
+  position: relative;
+  white-space: nowrap;
+}
+
+.ticker-content {
+  display: inline-block;
+  animation: scroll-left 30s linear infinite;
+  padding-right: 100%;
+}
+
+.ticker-content:hover {
+  animation-play-state: paused;
+}
+
+/* Subtle gradient backgrounds */
+.ticker-profit {
+  background: linear-gradient(90deg, #d1fae5 0%, #a7f3d0 100%);
+}
+
+.ticker-loss {
+  background: linear-gradient(90deg, #fee2e2 0%, #fecaca 100%);
+}
+
+/* Dark mode support */
+.dark .ticker-profit {
+  background: linear-gradient(90deg, #064e3b 0%, #065f46 100%);
+}
+
+.dark .ticker-loss {
+  background: linear-gradient(90deg, #7f1d1d 0%, #991b1b 100%);
+}

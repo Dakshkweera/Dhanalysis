@@ -7,15 +7,16 @@ import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
 import { validateInvestment, validateStockSymbol } from '../middleware/validation.js';
 import { validateUserId } from '../middleware/validation.js';
 import { generateHistoricalSnapshots } from '../services/batchSnapshotService.js';
+import { checkUnprocessedInvestments } from '../controllers/investmentController.js';
 
 
 const router = express.Router();
 
 // Protected route - user must be authenticated
-router.post('/add-investment', /*verifyFirebaseToken ,*/ validateInvestment,validateStockSymbol,addInvestment);
-router.get('/:userId', /*verifyFirebaseToken ,*/ validateUserId,getUserInvestments);
-router.put('/edit/:investmentId', /*verifyFirebaseToken ,*/ validateInvestment,validateStockSymbol, editInvestment);
-router.delete('/delete/:id', /*verifyFirebaseToken ,*/ deleteInvestment);
+router.post('/add-investment', verifyFirebaseToken , validateInvestment,validateStockSymbol,addInvestment);
+router.get('/:userId', verifyFirebaseToken , validateUserId,getUserInvestments);
+router.put('/edit/:investmentId', verifyFirebaseToken , validateInvestment,validateStockSymbol, editInvestment);
+router.delete('/delete/:id', verifyFirebaseToken , deleteInvestment);
 router.post('/batch-process', async (req, res) => {
   try {
     const { userId } = req.body;
@@ -38,6 +39,8 @@ router.post('/batch-process', async (req, res) => {
     });
   }
 });
+
+router.get('/unprocessed/:userId', checkUnprocessedInvestments);
 
 export default router;
 

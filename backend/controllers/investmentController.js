@@ -29,7 +29,7 @@ export const addInvestment = async (req, res) => {
     const user = await User.findOne({ uid: userId });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Create investment
+
     const newInvestment = new Investment({
       userId,
       symbol: symbol.toUpperCase().trim(),
@@ -37,6 +37,8 @@ export const addInvestment = async (req, res) => {
       quantity,
       buyPrice,
       buyDate: parsedBuyDate,
+      isProcessed: false,  // ← Mark as unprocessed
+      processedAt: null
     });
 
     // Save investment
@@ -71,6 +73,7 @@ export const addInvestment = async (req, res) => {
     res.status(201).json({ 
   message: 'Investment added', 
   investment: newInvestment,
+  needsProcessing: true,
   stockInfo: req.stockInfo,  // ← Populated by validation!
   firstInvestmentUpdated: firstInvestmentUpdated
 });
@@ -288,4 +291,33 @@ export const deleteInvestment = async (req, res) => {
   return sendErrorResponse(res, errorResponse, 500);
 }
 
+};
+
+
+// controllers/investmentController.js
+
+export const checkUnprocessedInvestments = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const unprocessedCount = await Investment.countDocuments({
+      userId,
+      isProcessed: false
+    });
+
+    const hasUnprocessed = unprocessedCount > 0;
+
+    return res.status(200).json({
+      success: true,
+      hasUnprocessed,
+      unprocessedCount
+    });
+
+  } catch (error) {
+    console.error('Error checking unprocessed investments:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
 };
