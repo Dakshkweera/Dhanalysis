@@ -8,11 +8,14 @@ import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Investments from './pages/Investments';
-import Reports from './pages/Reports';
+import Reports from './pages/Reports';  // Main container
+import Overview from './pages/Reports/Overview';  // Tab 1
+import Performance from './pages/Reports/Performance';  // Tab 2
+import RiskAnalysis from './pages/Reports/RiskAnalysis';  // Tab 3
+import Benchmark from './pages/Reports/Benchmark';  // Tab 4
 import AI from './pages/AI';
 import Settings from './pages/Settings';
 import './styles/ticker.css';
-
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -56,6 +59,7 @@ function App() {
             )
           }
         />
+        
         <Route
           path="/investments"
           element={
@@ -66,6 +70,8 @@ function App() {
             )
           }
         />
+        
+        {/* Reports Routes with nested routing */}
         <Route
           path="/reports"
           element={
@@ -75,7 +81,14 @@ function App() {
               <Navigate to="/login" />
             )
           }
-        />
+        >
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<Overview />} />
+          <Route path="performance" element={<Performance />} />
+          <Route path="risk-analysis" element={<RiskAnalysis />} />
+          <Route path="benchmark" element={<Benchmark />} />
+        </Route>
+        
         <Route
           path="/ai"
           element={
@@ -86,6 +99,7 @@ function App() {
             )
           }
         />
+        
         <Route
           path="/settings"
           element={

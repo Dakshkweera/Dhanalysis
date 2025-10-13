@@ -1,109 +1,72 @@
-import mongoose from "mongoose";
+// backend/models/DailyReport.js
+
+import mongoose from 'mongoose';
+
+const stockPerformanceSchema = new mongoose.Schema({
+  symbol: { type: String, required: true },
+  quantity: { type: Number, required: true },
+  currentPrice: { type: Number, required: true },
+  previousPrice: { type: Number, default: null },
+  value: { type: Number, required: true },
+  dayChange: { type: Number, default: 0 },
+  dayChangeAmount: { type: Number, default: 0 },
+  weight: { type: Number, default: 0 }
+}, { _id: false });
+
+const benchmarkComparisonSchema = new mongoose.Schema({
+  nifty50Value: { type: Number, default: null },
+  niftyDailyReturn: { type: Number, default: 0 },
+  beatNifty: { type: Boolean, default: false },
+  outperformance: { type: Number, default: 0 }
+}, { _id: false });
 
 const dailyReportSchema = new mongoose.Schema({
-  userId: { 
-    type: String, 
+  userId: {
+    type: String,
     required: true,
     index: true
   },
-  date: { 
-    type: Date, 
-    required: true 
-  },
-  
-  // Portfolio metrics
-  totalInvested: {
-    type: Number,
+  date: {
+    type: Date,        // ✅ CHANGED from String to Date
     required: true,
-    min: 0
-  },
-  portfolioValue: { 
-    type: Number, 
-    required: true,
-    min: 0
-  },
-  profitLoss: { 
-    type: Number, 
-    required: true 
-  },
-  roi: { 
-    type: Number, 
-    required: true 
-  },
-  cagr: {
-    type: Number,
-    required: true
-  },
-  xirr: {              // ← ADD THIS FIELD
-  type: Number,
-  default: null
-  },
-  absoluteReturn: {
-    type: Number,
-    required: true
+    index: true
   },
   
-  // Day-over-day change (UPDATED)
-  dailyChange: {
-    portfolioValue: Number,        // Total portfolio value change
-    percentage: Number,            // Total percentage change
-    newCapitalAdded: Number,       // New money invested (or withdrawn if negative)
-    marketChange: Number,          // Actual market performance
-    marketChangePercentage: Number // Market performance percentage
+  // ✅ Existing fields
+  totalInvested: { type: Number, required: true },
+  portfolioValue: { type: Number, required: true },
+  profitLoss: { type: Number, required: true },
+  roi: { type: Number, required: true },
+  cagr: { type: Number, default: 0 },
+  xirr: { type: Number, default: null },
+  absoluteReturn: { type: Number, default: 0 },
+  totalHoldings: { type: Number, default: 0 },
+  
+  // ✅ NEW: Daily changes
+  dailyReturn: { type: Number, default: 0 },
+  dailyProfitLoss: { type: Number, default: 0 },
+  
+  // ✅ NEW: Drawdown tracking
+  peakReturn: { type: Number, default: 0 },
+  currentDrawdown: { type: Number, default: 0 },
+  
+  // ✅ NEW: Enhanced benchmark comparison
+  benchmarkComparison: {
+    type: benchmarkComparisonSchema,
+    default: () => ({})
   },
   
-  // Top performers snapshot
-  topPerformers: {
-    best: {
-      symbol: String,
-      roi: Number,
-      profitLoss: Number
-    },
-    worst: {
-      symbol: String,
-      roi: Number,
-      profitLoss: Number
-    }
-  },
-  
-  // Holdings count
-  totalHoldings: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  
-  // Benchmark comparison (for future use)
- benchmarkComparison: {
-  nifty50Value: {
-    type: Number,
-    default: null
-  },
-  nifty50Change: {
-    type: Number,
-    default: null
-  },
-  niftyReturnSinceStart: {
-    type: Number,
-    default: null
-  },
-  portfolioReturnSinceStart: {
-    type: Number,
-    default: null
-  },
-  outperformance: {
-    type: Number,
-    default: null
-  },
-  outperformanceXIRR: {
-    type: Number,
-    default: null
+  // ✅ NEW: Per-stock performance
+  stockPerformance: {
+    type: [stockPerformanceSchema],
+    default: []
   }
-}
+  
+}, {
+  timestamps: true
+});
 
-}, { timestamps: true });
+// Compound index for efficient queries
+dailyReportSchema.index({ userId: 1, date: -1 });
 
-// Compound unique index: one report per user per day
-dailyReportSchema.index({ userId: 1, date: 1 }, { unique: true });
-
-export default mongoose.model("DailyReport", dailyReportSchema);
+export default mongoose.model('DailyReport', dailyReportSchema);

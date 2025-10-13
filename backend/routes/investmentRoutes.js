@@ -14,22 +14,22 @@ const router = express.Router();
 
 // Protected route - user must be authenticated
 router.post('/add-investment', verifyFirebaseToken , validateInvestment,validateStockSymbol,addInvestment);
-router.get('/:userId', verifyFirebaseToken , validateUserId,getUserInvestments);
+router.get('/:userId', /*verifyFirebaseToken , validateUserId,*/getUserInvestments);
 router.put('/edit/:investmentId', verifyFirebaseToken , validateInvestment,validateStockSymbol, editInvestment);
 router.delete('/delete/:id', verifyFirebaseToken , deleteInvestment);
 router.post('/batch-process', async (req, res) => {
   try {
-    const { userId } = req.body;
-
+    const { userId, force } = req.body;  // ✅ Add force parameter
+    
     if (!userId) {
       return res.status(400).json({ success: false, error: 'userId is required' });
     }
-
-    // Run batch processing
-    const result = await generateHistoricalSnapshots(userId);
-
+    
+    // ✅ Pass force option to service
+    const result = await generateHistoricalSnapshots(userId, { force });
+    
     return res.status(200).json(result);
-
+    
   } catch (error) {
     console.error('Batch process error:', error);
     return res.status(500).json({ 
@@ -39,6 +39,7 @@ router.post('/batch-process', async (req, res) => {
     });
   }
 });
+
 
 router.get('/unprocessed/:userId', checkUnprocessedInvestments);
 

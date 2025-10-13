@@ -13,6 +13,7 @@ import userRoutes from "./routes/userRoutes.js";
 import investmentRoutes from "./routes/investmentRoutes.js";
 import portfolioRoutes from './routes/portfolioRoutes.js';
 import marketRoutes from './routes/marketRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/investments", investmentRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/market', marketRoutes);
+app.use('/api/analytics', analyticsRoutes); 
 
 // 404 handler (must be AFTER all routes)
 app.use(notFound);

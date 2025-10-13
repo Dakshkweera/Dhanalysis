@@ -1,4 +1,4 @@
-// services/batchSnapshotService.js
+// backend/services/batchSnapshotService.js
 
 import Investment from '../models/Investment.js';
 import DailyReport from '../models/DailyReport.js';
@@ -7,19 +7,13 @@ import User from '../models/User.js';
 import { ensureNiftyDataExists } from '../utils/niftyBackfill.js';
 import { fetchMultipleStockPrices } from '../utils/historicalPrices.js';
 import { calculateXIRR } from '../services/xirrService.js';
-
-/**
- * Calculate CAGR
- */
-const calculateCAGR = (initialValue, finalValue, days) => {
-  if (initialValue <= 0 || finalValue <= 0 || days <= 0) return 0;
-  const years = days / 365;
-  if (years < 0.02) return 0;
-  const cagr = (Math.pow(finalValue / initialValue, 1 / years) - 1) * 100;
-  if (cagr < -99) return -99.99;
-  if (cagr > 999) return 999.99;
-  return parseFloat(cagr.toFixed(2));
-};
+import {
+  calculateDailyChanges,
+  calculateDrawdown,
+  calculateBenchmarkComparison,
+  calculateStockPerformance,
+  calculateCAGR
+} from './metricsCalculator.js';
 
 /**
  * Generate trading days between two dates (skip weekends)
@@ -41,11 +35,10 @@ const getTradingDays = (startDate, endDate) => {
 };
 
 /**
- * SMART Batch Processing Function
- * Only processes unprocessed investments and updates snapshots accordingly
+ * SMART Batch Processing with Enhanced Metrics + Robust Holiday Detection
  */
 export const generateHistoricalSnapshots = async (userId, options = {}) => {
-  const { force = false } = options;
+  const { force = false, onProgress } = options;
   
   try {
     console.log(`📊 Starting SMART batch snapshot generation for user ${userId}`);
@@ -59,28 +52,34 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
     }
 
     // Step 2: Find earliest UNPROCESSED investment
-    const unprocessedInvestments = allInvestments.filter(inv => !inv.isProcessed);
+    let unprocessedInvestments = allInvestments.filter(inv => !inv.isProcessed);
     
     console.log(`📈 Total investments: ${allInvestments.length}`);
-    console.log(`⏳ Unprocessed investments: ${unprocessedInvestments.length}`);
+    console.log(`⏳ Unprocessed investments (before force): ${unprocessedInvestments.length}`);
 
     // If force mode, mark all as unprocessed and delete snapshots
     if (force) {
       console.log('🔄 Force mode: Resetting all investments to unprocessed...');
-      await Investment.updateMany({ userId }, { 
-        isProcessed: false,
-        processedAt: null
-      });
+      
+      await Investment.updateMany(
+        { userId }, 
+        { 
+          isProcessed: false,
+          processedAt: null
+        }
+      );
       
       console.log('🗑️ Deleting all existing snapshots...');
       await DailyReport.deleteMany({ userId });
       
-      // Reload investments
-      unprocessedInvestments.length = 0;
-      unprocessedInvestments.push(...allInvestments);
+      console.log('🔄 Reloading investments from database...');
+      const reloadedInvestments = await Investment.find({ userId }).sort({ buyDate: 1 });
+      unprocessedInvestments = reloadedInvestments;
+      
+      console.log(`✅ Force mode complete: ${unprocessedInvestments.length} investments marked as unprocessed`);
     }
 
-    // If all investments already processed, nothing to do
+    // Check if there are any unprocessed investments
     if (unprocessedInvestments.length === 0) {
       console.log('✅ All investments already processed. Nothing to do.');
       return {
@@ -100,15 +99,15 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
     console.log(`📅 Processing from: ${startDate.toISOString().split('T')[0]} to ${today.toISOString().split('T')[0]}`);
     console.log(`🎯 Earliest unprocessed investment: ${earliestUnprocessed.symbol} (${startDate.toISOString().split('T')[0]})`);
 
-    // Step 4: Delete snapshots from startDate onwards (need to recalculate with new investments)
+    // Step 4: Delete snapshots from startDate onwards
     const deletedCount = await DailyReport.deleteMany({
       userId,
-      date: { $gte: startDate.toISOString().split('T')[0] }
+      date: { $gte: startDate }
     });
     
     console.log(`🗑️ Deleted ${deletedCount.deletedCount} snapshots from ${startDate.toISOString().split('T')[0]} onwards`);
 
-    // Step 5: Update user's firstInvestmentDate if needed
+    // Step 5: Update user's firstInvestmentDate
     const firstInvestment = allInvestments[0];
     const firstBuyDate = new Date(firstInvestment.buyDate);
     
@@ -121,17 +120,28 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
     console.log('📊 Checking NIFTY data availability...');
     await ensureNiftyDataExists(startDate, today);
 
-    // Step 7: Get trading days from startDate to today
+    // Step 7: Get trading days
     const tradingDays = getTradingDays(startDate, today);
-    console.log(`📆 Processing ${tradingDays.length} trading days`);
+    console.log(`📆 Processing ${tradingDays.length} potential trading days`);
 
     let snapshotsCreated = 0;
+    let daysSkipped = 0;
     let apiCallCount = 0;
 
     // Step 8: Generate snapshots day by day
     for (let i = 0; i < tradingDays.length; i++) {
       const currentDate = tradingDays[i];
       const dateStr = currentDate.toISOString().split('T')[0];
+
+      // Progress callback
+      if (onProgress && (i + 1) % 10 === 0) {
+        onProgress({
+          current: i + 1,
+          total: tradingDays.length,
+          percentage: Math.round(((i + 1) / tradingDays.length) * 100),
+          currentDate: dateStr
+        });
+      }
 
       // Get investments that existed on this date
       const activeInvestments = allInvestments.filter(inv => {
@@ -148,7 +158,84 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
       const stockPrices = await fetchMultipleStockPrices(symbols, dateStr);
       apiCallCount += symbols.length;
 
-      // Calculate portfolio
+      // ===== COMPREHENSIVE HOLIDAY DETECTION ===== ↓
+
+      // Check 1: Null/NaN/Invalid prices
+      const invalidPrices = symbols.filter(symbol => {
+        const price = stockPrices[symbol];
+        return price === null || price === undefined || isNaN(price) || price <= 0;
+      });
+
+      if (invalidPrices.length > 0) {
+        console.log(`⏭️ Skipping ${dateStr} - ${invalidPrices.length}/${symbols.length} stocks have invalid prices (holiday/error)`);
+        invalidPrices.forEach(symbol => {
+          console.log(`   ❌ ${symbol}: ${stockPrices[symbol]}`);
+        });
+        daysSkipped++;
+        continue;
+      }
+
+      // Get yesterday's snapshot for comparison
+      const yesterdaySnapshot = await DailyReport.findOne({
+        userId,
+        date: { $lt: currentDate }
+      }).sort({ date: -1 });
+
+      if (yesterdaySnapshot && yesterdaySnapshot.stockPerformance) {
+        // Check 2: All prices exactly the same (stale data)
+        let unchangedCount = 0;
+        let comparedCount = 0;
+        
+        symbols.forEach(symbol => {
+          const todayPrice = stockPrices[symbol];
+          const yesterdayStock = yesterdaySnapshot.stockPerformance.find(
+            s => s.symbol === symbol + '.NS' || s.symbol === symbol
+          );
+          
+          if (yesterdayStock && yesterdayStock.currentPrice > 0) {
+            comparedCount++;
+            if (Math.abs(todayPrice - yesterdayStock.currentPrice) < 0.01) {
+              unchangedCount++;
+            }
+          }
+        });
+        
+        // If ALL comparable stocks are unchanged, it's suspicious
+        if (comparedCount > 0 && unchangedCount === comparedCount) {
+          console.log(`⏭️ Skipping ${dateStr} - All ${unchangedCount} stocks unchanged (stale data/holiday)`);
+          daysSkipped++;
+          continue;
+        }
+        
+        // Check 3: Impossible price changes (>50% for any stock)
+        let suspiciousCount = 0;
+        
+        symbols.forEach(symbol => {
+          const todayPrice = stockPrices[symbol];
+          const yesterdayStock = yesterdaySnapshot.stockPerformance.find(
+            s => s.symbol === symbol + '.NS' || s.symbol === symbol
+          );
+          
+          if (yesterdayStock && yesterdayStock.currentPrice > 0) {
+            const changePercent = Math.abs((todayPrice - yesterdayStock.currentPrice) / yesterdayStock.currentPrice) * 100;
+            
+            if (changePercent > 50) {
+              console.warn(`⚠️ ${symbol}: ${yesterdayStock.currentPrice} → ${todayPrice} (${changePercent.toFixed(1)}% change!)`);
+              suspiciousCount++;
+            }
+          }
+        });
+        
+        if (suspiciousCount > 0) {
+          console.log(`⏭️ Skipping ${dateStr} - ${suspiciousCount} stocks have impossible changes (>50%)`);
+          daysSkipped++;
+          continue;
+        }
+      }
+
+      // ===== END HOLIDAY DETECTION ===== ↑
+
+      // Calculate portfolio value
       let totalInvested = 0;
       let totalValue = 0;
 
@@ -167,25 +254,59 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
 
       if (totalInvested <= 0) continue;
 
-      // Calculate metrics
-      const daysSinceStart = Math.floor((currentDate - firstBuyDate) / (1000 * 60 * 60 * 24));
-      const cagr = calculateCAGR(totalInvested, totalValue, daysSinceStart);
+      // ===== CORRECTED METRICS CALCULATIONS ===== ↓
 
-      // Calculate XIRR only for today
-      let xirrValue = null;
-      const isToday = dateStr === today.toISOString().split('T')[0];
-      if (isToday && daysSinceStart >= 7) {
-        xirrValue = calculateXIRR(activeInvestments, totalValue);
-      }
+      // Calculate per-stock performance FIRST
+      const stockPerformance = calculateStockPerformance(
+        activeInvestments,
+        stockPrices,
+        yesterdaySnapshot?.stockPerformance,
+        totalValue
+      );
+
+      // Calculate daily changes FROM stock performance (✅ cash-flow free)
+      const dailyChanges = calculateDailyChanges(stockPerformance);
+
+      // Calculate drawdown using return % (✅ cash-flow free)
+      const previousPeakReturn = yesterdaySnapshot?.peakReturn || null;
+      const drawdown = calculateDrawdown(totalValue, totalInvested, previousPeakReturn);
 
       // Get NIFTY data
       const niftyRecord = await MarketBenchmark.findOne({ date: dateStr });
-      const nifty50Value = niftyRecord ? niftyRecord.nifty50 : null;
 
-      // Create snapshot
+      // Additional NIFTY validation
+      if (!niftyRecord || !niftyRecord.nifty50) {
+        console.log(`⏭️ Skipping ${dateStr} - No NIFTY data (market closed)`);
+        daysSkipped++;
+        continue;
+      }
+
+      const benchmarkData = calculateBenchmarkComparison(
+        dailyChanges.dailyReturn,
+        niftyRecord?.nifty50Change || 0,
+        niftyRecord?.nifty50 || null
+      );
+
+      // ===== END CORRECTED METRICS ===== ↑
+
+      // Calculate existing metrics
+      const daysSinceStart = Math.floor((currentDate - firstBuyDate) / (1000 * 60 * 60 * 24));
+      const cagr = calculateCAGR(totalInvested, totalValue, daysSinceStart);
+
+      // Calculate XIRR
+      let xirrValue = null;
+      if (daysSinceStart >= 7) {
+        xirrValue = calculateXIRR(activeInvestments, totalValue, currentDate);
+        
+        if ((i + 1) % 50 === 0 || i === tradingDays.length - 1) {
+          console.log(`📊 XIRR for ${dateStr}: ${xirrValue !== null ? xirrValue + '%' : 'null'}`);
+        }
+      }
+
+      // Create snapshot with ALL corrected metrics
       await DailyReport.create({
         userId,
-        date: dateStr,
+        date: currentDate,
         totalInvested,
         portfolioValue: totalValue,
         profitLoss: totalValue - totalInvested,
@@ -194,9 +315,14 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
         xirr: xirrValue,
         absoluteReturn: totalValue - totalInvested,
         totalHoldings: activeInvestments.length,
-        benchmarkComparison: {
-          nifty50Value
-        }
+        
+        // ✅ CORRECTED FIELDS (cash-flow free)
+        dailyReturn: dailyChanges.dailyReturn,
+        dailyProfitLoss: dailyChanges.dailyProfitLoss,
+        peakReturn: drawdown.peakReturn,
+        currentDrawdown: drawdown.currentDrawdown,
+        benchmarkComparison: benchmarkData,
+        stockPerformance
       });
 
       snapshotsCreated++;
@@ -210,7 +336,7 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
 
       // Progress logging
       if ((i + 1) % 50 === 0) {
-        console.log(`⏳ Progress: ${i + 1}/${tradingDays.length} days (${snapshotsCreated} created)`);
+        console.log(`⏳ Progress: ${i + 1}/${tradingDays.length} days (${snapshotsCreated} created, ${daysSkipped} skipped)`);
       }
     }
 
@@ -225,11 +351,14 @@ export const generateHistoricalSnapshots = async (userId, options = {}) => {
     );
 
     console.log(`✅ Marked ${unprocessedIds.length} investments as processed`);
-    console.log(`✅ Batch processing complete! Created ${snapshotsCreated} snapshots`);
+    console.log(`✅ Batch processing complete! Created ${snapshotsCreated} snapshots (${daysSkipped} days skipped as holidays/errors)`);
 
     return {
       success: true,
       snapshotsCreated,
+      daysSkipped,
+      tradingDaysProcessed: tradingDays.length,
+      actualTradingDays: snapshotsCreated,
       investmentsProcessed: unprocessedIds.length,
       dateRange: {
         from: startDate.toISOString().split('T')[0],

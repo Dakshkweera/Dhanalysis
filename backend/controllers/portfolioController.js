@@ -11,6 +11,12 @@ import { calculateXIRR } from '../services/xirrService.js';
 import { getBatchSectors } from '../services/sectorService.js';
 import { getNiftyForDate, calculateNiftyReturn } from '../services/niftyService.js';
 import { handleYahooError, handleDbError, sendErrorResponse } from '../utils/errorHandler.js';
+import {
+  calculateDailyChanges,
+  calculateDrawdown,
+  calculateBenchmarkComparison,
+  calculateStockPerformance
+} from '../services/metricsCalculator.js';
 
 
 
@@ -280,10 +286,15 @@ export const createDailySnapshot = async (req, res) => {
         cagr: 0,
         xirr: null,
         absoluteReturn: 0,
-        dailyChange: null,
-        topPerformers: { best: null, worst: null },
         totalHoldings: 0,
-        benchmarkComparison: {}
+        
+        // ✅ CORRECTED: Empty portfolio fields
+        dailyReturn: 0,
+        dailyProfitLoss: 0,
+        peakReturn: 0,          // Changed from peakValue
+        currentDrawdown: 0,
+        benchmarkComparison: {},
+        stockPerformance: []
       });
       
       return res.status(201).json({
@@ -304,98 +315,81 @@ export const createDailySnapshot = async (req, res) => {
       user.firstInvestmentDate
     );
     
-    // Find top performers
-    const topPerformers = findTopPerformers(investments, priceMap);
-    
     // Calculate XIRR
-    const xirrValue = calculateXIRR(investments, metrics.currentValue);
+    const xirrValue = calculateXIRR(investments, metrics.currentValue, today);
     
-    // Find last available snapshot (handles weekends/holidays)
-    const lastSnapshot = await DailyReport.findOne({
+    // ===== GET YESTERDAY'S SNAPSHOT ===== ↓
+    
+    const yesterdaySnapshot = await DailyReport.findOne({
       userId,
       date: { $lt: today }
     })
     .sort({ date: -1 })
     .limit(1);
     
-    console.log("📊 Last snapshot found:", lastSnapshot ? lastSnapshot.date.toISOString() : "None");
+    console.log("📊 Last snapshot found:", yesterdaySnapshot ? yesterdaySnapshot.date.toISOString() : "None");
     
-    // Calculate daily change with capital tracking
-    let dailyChange = null;
+    // ===== CALCULATE PER-STOCK PERFORMANCE FIRST ===== ↓
     
-    if (lastSnapshot) {
-      const portfolioValueChange = metrics.currentValue - lastSnapshot.portfolioValue;
-      const newCapitalAdded = metrics.totalInvested - lastSnapshot.totalInvested;
-      const marketChange = portfolioValueChange - newCapitalAdded;
-      
-      const totalPercentage = lastSnapshot.portfolioValue > 0
-        ? (portfolioValueChange / lastSnapshot.portfolioValue) * 100
-        : 0;
-      
-      const marketChangePercentage = lastSnapshot.portfolioValue > 0 
-        ? (marketChange / lastSnapshot.portfolioValue) * 100 
-        : 0;
-      
-      dailyChange = {
-        portfolioValue: parseFloat(portfolioValueChange.toFixed(2)),
-        percentage: parseFloat(totalPercentage.toFixed(2)),
-        newCapitalAdded: parseFloat(newCapitalAdded.toFixed(2)),
-        marketChange: parseFloat(marketChange.toFixed(2)),
-        marketChangePercentage: parseFloat(marketChangePercentage.toFixed(2))
-      };
-      
-      console.log("📈 Daily change calculated:", dailyChange);
-    } else {
-      console.log("⚠️ No previous snapshot - first snapshot for this user");
-    }
-
-    // Fetch/create NIFTY benchmark for today
-    // Fetch/create NIFTY benchmark for today
-  let benchmarkComparison = {};
-
-  try {
-    console.log('🔍 Fetching NIFTY for today...');
-    const todayBenchmark = await getNiftyForDate(today);
-    console.log('✅ Today benchmark:', todayBenchmark);
+    const stockPerformance = calculateStockPerformance(
+      investments,
+      priceMap,
+      yesterdaySnapshot?.stockPerformance,
+      metrics.currentValue
+    );
     
-    // Calculate NIFTY return since user's first investment
-    console.log('📅 User first investment date:', user.firstInvestmentDate);
+    // ===== CALCULATE DAILY CHANGES (CORRECTED) ===== ↓
     
-    if (user.firstInvestmentDate) {
-      console.log('🔢 Calculating NIFTY return from', user.firstInvestmentDate, 'to', today);
+    const dailyChanges = calculateDailyChanges(stockPerformance);
+    
+    // ===== CALCULATE DRAWDOWN (CORRECTED) ===== ↓
+    
+    const previousPeakReturn = yesterdaySnapshot?.peakReturn || null;
+    const drawdown = calculateDrawdown(
+      metrics.currentValue,
+      metrics.totalInvested,
+      previousPeakReturn
+    );
+    
+    // ===== CALCULATE BENCHMARK COMPARISON ===== ↓
+    
+    let benchmarkComparison = {};
+    
+    try {
+      console.log('🔍 Fetching NIFTY for today...');
       
-      const niftyReturn = await calculateNiftyReturn(
-        user.firstInvestmentDate, 
-        today
+      // Get today's NIFTY data
+      const todayBenchmark = await getNiftyForDate(today);
+      console.log('✅ Today benchmark:', todayBenchmark);
+      
+      // Get yesterday's NIFTY to calculate daily change
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const yesterdayBenchmark = await MarketBenchmark.findOne({
+        date: yesterday.toISOString().split('T')[0]
+      });
+      
+      const niftyDailyReturn = yesterdayBenchmark && yesterdayBenchmark.nifty50
+        ? ((todayBenchmark.nifty50 - yesterdayBenchmark.nifty50) / yesterdayBenchmark.nifty50) * 100
+        : todayBenchmark.nifty50Change || 0;
+      
+      // Calculate benchmark comparison
+      benchmarkComparison = calculateBenchmarkComparison(
+        dailyChanges.dailyReturn,
+        niftyDailyReturn,
+        todayBenchmark.nifty50
       );
       
-      console.log('📊 NIFTY return result:', niftyReturn);
+      console.log('📊 Benchmark comparison:', benchmarkComparison);
       
-      if (niftyReturn) {
-        benchmarkComparison = {
-          nifty50Value: todayBenchmark.nifty50,
-          nifty50Change: todayBenchmark.nifty50Change,
-          niftyReturnSinceStart: niftyReturn.return,
-          portfolioReturnSinceStart: metrics.roi,
-          outperformance: parseFloat((metrics.roi - niftyReturn.return).toFixed(2)),
-          outperformanceXIRR: xirrValue ? parseFloat((xirrValue - niftyReturn.return).toFixed(2)) : null
-        };
-        
-        console.log('📊 Benchmark comparison:', benchmarkComparison);
-      } else {
-        console.log('⚠️ niftyReturn is null!');
-      }
-    } else {
-      console.log('⚠️ User has no firstInvestmentDate!');
+    } catch (error) {
+      console.error('⚠️ Error fetching benchmark:', error.message);
+      // Continue without benchmark data
     }
-  } catch (error) {
-    console.error('⚠️ Error fetching benchmark:', error.message);
-    console.error('Full error:', error);
-    // Continue without benchmark data
-  }
-
     
-    // Create snapshot
+    // ===== CREATE SNAPSHOT WITH ALL CORRECTED FIELDS ===== ↓
+    
     const snapshot = await DailyReport.create({
       userId,
       date: today,
@@ -406,16 +400,18 @@ export const createDailySnapshot = async (req, res) => {
       cagr: metrics.cagr,
       xirr: xirrValue,
       absoluteReturn: metrics.absoluteReturn,
-      dailyChange: dailyChange,
-      topPerformers: {
-        best: topPerformers.best,
-        worst: topPerformers.worst
-      },
       totalHoldings: metrics.totalHoldings,
-      benchmarkComparison: benchmarkComparison 
+      
+      // ✅ CORRECTED FIELDS (cash-flow free)
+      dailyReturn: dailyChanges.dailyReturn,
+      dailyProfitLoss: dailyChanges.dailyProfitLoss,
+      peakReturn: drawdown.peakReturn,              // Changed from peakValue
+      currentDrawdown: drawdown.currentDrawdown,
+      benchmarkComparison: benchmarkComparison,
+      stockPerformance: stockPerformance
     });
     
-    console.log("✅ Snapshot created successfully");
+    console.log("✅ Snapshot created successfully with cash-flow-free metrics");
     
     return res.status(201).json({
       success: true,
@@ -432,6 +428,7 @@ export const createDailySnapshot = async (req, res) => {
     });
   }
 };
+
 
 
 // Get portfolio history for charts
@@ -473,10 +470,10 @@ export const getPortfolioHistory = async (req, res) => {
     
     console.log("📊 Fetching history with query:", query);
     
-    // Fetch snapshots
+    // ✅ FIXED: Select correct fields (peakReturn instead of peakValue)
     const snapshots = await DailyReport.find(query)
-      .sort({ date: 1 })  // Ascending order (oldest first)
-      .select('date portfolioValue totalInvested profitLoss roi xirr cagr dailyChange topPerformers benchmarkComparison');
+      .sort({ date: 1 })
+      .select('date portfolioValue totalInvested profitLoss roi xirr cagr dailyReturn dailyProfitLoss peakReturn currentDrawdown benchmarkComparison stockPerformance');
     
     if (snapshots.length === 0) {
       return res.status(404).json({
@@ -487,15 +484,30 @@ export const getPortfolioHistory = async (req, res) => {
     
     // Format data for frontend
     const data = snapshots.map(snap => ({
-      date: snap.date.toISOString().split('T')[0],  // YYYY-MM-DD format
+      date: snap.date.toISOString().split('T')[0],
       portfolioValue: snap.portfolioValue,
       totalInvested: snap.totalInvested,
       profitLoss: snap.profitLoss,
       roi: snap.roi,
       xirr: snap.xirr,
       cagr: snap.cagr,
-      dailyReturn: snap.dailyChange ? snap.dailyChange.marketChangePercentage : null,
-      nifty50: snap.benchmarkComparison?.nifty50Value || null
+      
+      // ✅ CORRECT: Cash-flow-free fields
+      dailyReturn: snap.dailyReturn || 0,
+      dailyProfitLoss: snap.dailyProfitLoss || 0,
+      
+      // ✅ FIXED: Return-based drawdown fields
+      peakReturn: snap.peakReturn || 0,              // Changed from peakValue
+      currentDrawdown: snap.currentDrawdown || 0,
+      
+      // ✅ CORRECT: Benchmark comparison
+      nifty50: snap.benchmarkComparison?.nifty50Value || null,
+      niftyDailyReturn: snap.benchmarkComparison?.niftyDailyReturn || 0,
+      beatNifty: snap.benchmarkComparison?.beatNifty || false,
+      outperformance: snap.benchmarkComparison?.outperformance || 0,
+      
+      // ✅ CORRECT: Stock performance
+      stockPerformance: snap.stockPerformance || []
     }));
     
     // Calculate indexed values for chart (both start at 100)
@@ -525,6 +537,18 @@ export const getPortfolioHistory = async (req, res) => {
     const endInvested = snapshots[snapshots.length - 1].totalInvested;
     const capitalAdded = endInvested - startInvested;
     
+    // ✅ CORRECT: Calculate market change (excluding capital additions)
+    const marketChange = change - capitalAdded;
+    const marketChangePercent = startValue > 0 ? ((marketChange / startValue) * 100).toFixed(2) : 0;
+    
+    // ✅ CORRECT: Drawdown summary (using return-based drawdown)
+    const allDrawdowns = snapshots.map(s => s.currentDrawdown || 0);
+    const maxDrawdownInPeriod = Math.min(...allDrawdowns);
+    
+    // ✅ CORRECT: Calculate days above/below benchmark
+    const daysAboveNifty = chartData.filter(d => d.beatNifty).length;
+    const daysBelowNifty = chartData.length - daysAboveNifty;
+    
     console.log("✅ Found", snapshots.length, "snapshots");
     
     res.status(200).json({
@@ -532,16 +556,38 @@ export const getPortfolioHistory = async (req, res) => {
       count: chartData.length,
       data: chartData,
       summary: {
+        // Date range
         startDate: snapshots[0].date,
         endDate: snapshots[snapshots.length - 1].date,
-        startValue: startValue,
-        endValue: endValue,
-        change: parseFloat(change.toFixed(2)),
-        changePercent: parseFloat(changePercent),
-        capitalAdded: capitalAdded,
+        
+        // Portfolio values
+        startValue: parseFloat(startValue.toFixed(2)),
+        endValue: parseFloat(endValue.toFixed(2)),
+        
+        // Returns
+        totalChange: parseFloat(change.toFixed(2)),
+        totalChangePercent: parseFloat(changePercent),
+        
+        // ✅ CORRECT: Separate capital vs market change
+        capitalAdded: parseFloat(capitalAdded.toFixed(2)),
+        marketChange: parseFloat(marketChange.toFixed(2)),
+        marketChangePercent: parseFloat(marketChangePercent),
+        
+        // Performance metrics
         currentXIRR: snapshots[snapshots.length - 1].xirr,
-        benchmarkReturn: snapshots[snapshots.length - 1].benchmarkComparison?.niftyReturnSinceStart || null,
-        outperformance: snapshots[snapshots.length - 1].benchmarkComparison?.outperformance || null
+        currentCAGR: snapshots[snapshots.length - 1].cagr,
+        
+        // ✅ FIXED: Drawdown summary (return-based)
+        maxDrawdown: parseFloat(maxDrawdownInPeriod.toFixed(2)),
+        currentDrawdown: snapshots[snapshots.length - 1].currentDrawdown || 0,
+        peakReturn: snapshots[snapshots.length - 1].peakReturn || 0,  // Changed from peakValue
+        
+        // ✅ CORRECT: Benchmark comparison
+        benchmarkReturn: snapshots[snapshots.length - 1].benchmarkComparison?.niftyDailyReturn || 0,
+        outperformance: snapshots[snapshots.length - 1].benchmarkComparison?.outperformance || 0,
+        daysAboveNifty: daysAboveNifty,
+        daysBelowNifty: daysBelowNifty,
+        winRateVsNifty: parseFloat(((daysAboveNifty / chartData.length) * 100).toFixed(2))
       }
     });
     
