@@ -13,9 +13,10 @@ import Overview from './pages/Reports/Overview';  // Tab 1
 import Performance from './pages/Reports/Performance';  // Tab 2
 import RiskAnalysis from './pages/Reports/RiskAnalysis';  // Tab 3
 import Benchmark from './pages/Reports/Benchmark';  // Tab 4
-import AI from './pages/AI';
+import AI from './pages/AIInsights';
 import Settings from './pages/Settings';
 import './styles/ticker.css';
+
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
