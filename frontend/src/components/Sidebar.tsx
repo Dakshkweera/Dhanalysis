@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, TrendingUp, FileText, Brain, Settings, Menu, X } from 'lucide-react';
+import { Home, TrendingUp, FileText, Brain, Settings, X } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -38,18 +37,29 @@ function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo Section */}
-          <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
-            {isOpen && (
-              <h1 className="text-xl font-bold text-gray-800 dark:text-white">
-                Dhanalysis
-              </h1>
+          <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${
+            isOpen ? 'justify-between px-4' : 'justify-center px-2'
+          }`}>
+            {isOpen ? (
+              <>
+                <h1 className="text-xl font-bold text-gray-800 dark:text-white">
+                  Dhanalysis
+                </h1>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="lg:hidden text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white"
+                >
+                  <X size={24} />
+                </button>
+              </>
+            ) : (
+              // ✅ TRENDING UP ICON WHEN COLLAPSED
+              <div className="hidden lg:flex items-center justify-center w-full">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+                  <TrendingUp className="w-6 h-6 text-white" strokeWidth={2.5} />
+                </div>
+              </div>
             )}
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="lg:hidden text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white"
-            >
-              <X size={24} />
-            </button>
           </div>
 
           {/* Menu Items */}
@@ -59,11 +69,14 @@ function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 key={item.path}
                 to={item.path}
                 onClick={() => window.innerWidth < 1024 && setIsOpen(false)}
-                className={`flex items-center px-4 py-3 mx-2 rounded-lg transition-colors ${
+                className={`flex items-center mx-2 my-1 rounded-lg transition-colors ${
+                  isOpen ? 'px-4 py-3' : 'px-2 py-3 justify-center'
+                } ${
                   isActive(item.path)
                     ? 'bg-blue-500 text-white'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
+                title={!isOpen ? item.label : undefined}
               >
                 <item.icon size={24} />
                 {isOpen && <span className="ml-3 font-medium">{item.label}</span>}

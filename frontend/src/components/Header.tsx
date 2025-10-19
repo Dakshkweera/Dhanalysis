@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
   toggleSidebar: () => void;
+  isSidebarOpen: boolean;  // ✅ ADDED
 }
 
-function Header({ toggleSidebar }: HeaderProps) {
+function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {  // ✅ ADDED isSidebarOpen
   const [isDark, setIsDark] = useState(false);
   const navigate = useNavigate();
 
@@ -38,13 +39,24 @@ function Header({ toggleSidebar }: HeaderProps) {
 
   return (
     <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4">
-      <button
-        onClick={toggleSidebar}
-        className="text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white"
-      >
-        <Menu size={24} />
-      </button>
+      {/* LEFT SIDE */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggleSidebar}
+          className="text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white"
+        >
+          <Menu size={24} />
+        </button>
+        
+        {/* ✅ SHOW APP NAME ONLY WHEN SIDEBAR IS CLOSED */}
+        {!isSidebarOpen && (
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white">
+            Dhanalysis
+          </h1>
+        )}
+      </div>
 
+      {/* RIGHT SIDE */}
       <div className="flex items-center gap-4">
         <button
           onClick={toggleTheme}

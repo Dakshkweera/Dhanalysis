@@ -1,27 +1,82 @@
 import axios from 'axios';
 import ChatHistory from '../models/ChatHistory.js';
+import UsageLimit from '../models/UsageLimit.js';
+
+// Get current month string (e.g., "2025-10")
+function getCurrentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+// Check and update usage limits
+async function checkUsageLimit(userId) {
+  const currentMonth = getCurrentMonth();
+  
+  let usage = await UsageLimit.findOne({ userId, month: currentMonth });
+  
+  // Create new usage record if doesn't exist or new month
+  if (!usage) {
+    usage = new UsageLimit({
+      userId,
+      month: currentMonth,
+      questionsAsked: 0,
+      questionLimit: 10,
+      isPremium: false,
+      lastResetDate: new Date()
+    });
+    await usage.save();
+  }
+  
+  // Check if limit exceeded (skip if premium)
+  if (!usage.isPremium && usage.questionsAsked >= usage.questionLimit) {
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: usage.questionLimit,
+      resetDate: new Date(usage.lastResetDate.getFullYear(), usage.lastResetDate.getMonth() + 1, 1)
+    };
+  }
+  
+  return {
+    allowed: true,
+    remaining: usage.isPremium ? 'Unlimited' : usage.questionLimit - usage.questionsAsked,
+    limit: usage.isPremium ? 'Unlimited' : usage.questionLimit,
+    current: usage.questionsAsked
+  };
+}
+
+// Increment usage count
+async function incrementUsage(userId) {
+  const currentMonth = getCurrentMonth();
+  
+  await UsageLimit.findOneAndUpdate(
+    { userId, month: currentMonth },
+    { 
+      $inc: { questionsAsked: 1 },
+      $set: { updatedAt: new Date() }
+    },
+    { upsert: true }
+  );
+}
 
 // Fetch portfolio context from your existing endpoints
 async function getPortfolioContext(userId) {
   try {
     const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
     
-    // Fetch all portfolio data in parallel
     const [summary, allocation, correlation, rollingMetrics, latestSnapshot] = await Promise.all([
       axios.get(`${baseUrl}/api/portfolio/summary?userId=${userId}`),
       axios.get(`${baseUrl}/api/portfolio/allocation?userId=${userId}`),
-      axios.get(`${baseUrl}/api/analytics/correlation?userId=${userId}`), // All-time correlation
-      axios.get(`${baseUrl}/api/analytics/rolling-metrics?userId=${userId}`), // All-time metrics
-      axios.get(`${baseUrl}/api/portfolio/history?userId=${userId}&days=1`) // Latest snapshot
+      axios.get(`${baseUrl}/api/analytics/correlation?userId=${userId}`),
+      axios.get(`${baseUrl}/api/analytics/rolling-metrics?userId=${userId}`),
+      axios.get(`${baseUrl}/api/portfolio/history?userId=${userId}&days=1`)
     ]);
 
     const summaryData = summary.data.summary;
     const allocationData = allocation.data;
     const correlationData = correlation.data;
     const metricsData = rollingMetrics.data;
-    const latestData = latestSnapshot.data.data[0]; // Most recent snapshot
+    const latestData = latestSnapshot.data.data[0];
 
-    // Format context for AI
     const context = `
 USER'S PORTFOLIO DATA:
 
@@ -96,11 +151,11 @@ DATA PERIOD: ${metricsData.dataPoints} trading days from ${new Date(metricsData.
 
   } catch (error) {
     console.error('Error fetching portfolio context:', error.message);
-    return null; // Return null if portfolio data unavailable
+    return null;
   }
 }
 
-// Call Perplexity API with or without portfolio context
+// Call Perplexity API
 async function callPerplexityAPI(question, portfolioContext = null) {
   const systemPrompt = `You are a professional portfolio analysis assistant for Dhanalysis platform.
 
@@ -129,7 +184,6 @@ NOT ALLOWED:
 
 Always end responses with: "⚠️ This is informational only. Consult a SEBI-registered advisor for personalized advice."`;
 
-  // Build user message with optional portfolio context
   let userMessage = question;
   if (portfolioContext) {
     userMessage = `${portfolioContext}\n\nUSER QUESTION: ${question}`;
@@ -175,7 +229,20 @@ export async function handleChat(req, res) {
       });
     }
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    // ✅ CHECK USAGE LIMIT
+    const usageCheck = await checkUsageLimit(userId);
+    
+    if (!usageCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        message: `Monthly limit of ${usageCheck.limit} questions reached. Resets on ${usageCheck.resetDate.toLocaleDateString()}.`,
+        limitReached: true,
+        limit: usageCheck.limit,
+        resetDate: usageCheck.resetDate
+      });
+    }
+
+    const currentMonth = getCurrentMonth();
 
     console.log(`Chat request from user: ${userId}, question: ${question}`);
 
@@ -191,6 +258,10 @@ export async function handleChat(req, res) {
     // Call Perplexity with context
     const aiResponse = await callPerplexityAPI(question, portfolioContext);
 
+    // ✅ INCREMENT USAGE COUNT
+    await incrementUsage(userId);
+
+    // Save chat record
     const chatRecord = new ChatHistory({
       userId,
       question: question.trim(),
@@ -202,12 +273,20 @@ export async function handleChat(req, res) {
 
     await chatRecord.save();
 
+    // ✅ GET UPDATED USAGE INFO
+    const updatedUsage = await checkUsageLimit(userId);
+
     return res.json({
       success: true,
       answer: aiResponse.answer,
       sources: aiResponse.sources,
       timestamp: chatRecord.timestamp,
       hasPortfolioContext: !!portfolioContext,
+      usage: {
+        remaining: updatedUsage.remaining,
+        limit: updatedUsage.limit,
+        current: updatedUsage.current + 1
+      },
       message: 'Response generated successfully'
     });
 
@@ -242,6 +321,47 @@ export async function getChatHistory(req, res) {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch chat history'
+    });
+  }
+}
+
+// ✅ NEW ENDPOINT: Get usage stats
+export async function getUsageStats(req, res) {
+  try {
+    const { userId } = req.params;
+    const currentMonth = getCurrentMonth();
+    
+    const usage = await UsageLimit.findOne({ userId, month: currentMonth });
+    
+    if (!usage) {
+      return res.json({
+        success: true,
+        usage: {
+          questionsAsked: 0,
+          questionLimit: 10,
+          remaining: 10,
+          isPremium: false,
+          resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+        }
+      });
+    }
+    
+    return res.json({
+      success: true,
+      usage: {
+        questionsAsked: usage.questionsAsked,
+        questionLimit: usage.isPremium ? 'Unlimited' : usage.questionLimit,
+        remaining: usage.isPremium ? 'Unlimited' : usage.questionLimit - usage.questionsAsked,
+        isPremium: usage.isPremium,
+        resetDate: new Date(usage.lastResetDate.getFullYear(), usage.lastResetDate.getMonth() + 1, 1)
+      }
+    });
+
+  } catch (error) {
+    console.error('getUsageStats Error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch usage stats'
     });
   }
 }
