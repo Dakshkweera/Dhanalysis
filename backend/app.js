@@ -21,4 +21,3 @@ app.get("/", (req, res) => res.send("Backend running"));
 
 export default app;
 
-// hey
