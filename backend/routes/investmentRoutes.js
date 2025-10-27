@@ -14,7 +14,7 @@ const router = express.Router();
 
 // Protected route - user must be authenticated
 router.post('/add-investment', verifyFirebaseToken , validateInvestment,validateStockSymbol,addInvestment);
-router.get('/:userId', /*verifyFirebaseToken , validateUserId,*/getUserInvestments);
+router.get('/:userId', verifyFirebaseToken , validateUserId,getUserInvestments);
 router.put('/edit/:investmentId', verifyFirebaseToken , validateInvestment,validateStockSymbol, editInvestment);
 router.delete('/delete/:id', verifyFirebaseToken , deleteInvestment);
 router.post('/batch-process', async (req, res) => {

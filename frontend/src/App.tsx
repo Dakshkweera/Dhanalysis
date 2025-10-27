@@ -15,8 +15,8 @@ import RiskAnalysis from './pages/Reports/RiskAnalysis';
 import Benchmark from './pages/Reports/Benchmark';
 import AI from './pages/AIInsights';
 import Settings from './pages/Settings';
+import LandingPage from './pages/LandingPage';  // Added landing page import
 import './styles/ticker.css';
-
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -32,7 +32,7 @@ function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header 
             toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
-            isSidebarOpen={sidebarOpen}  // ✅ ADD THIS LINE
+            isSidebarOpen={sidebarOpen}  // ✅ keep this
           />
           <main className="flex-1 overflow-y-auto">
             {children}
@@ -47,7 +47,7 @@ function App() {
       <Toaster position="top-right" />
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/" element={<LandingPage />} />  {/* Landing page at root */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/onboarding" element={<Onboarding />} />
