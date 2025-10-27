@@ -426,7 +426,7 @@ function Benchmark() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.dailyComparison.slice().reverse().map((day, index) => (
+              {data.dailyComparison.slice().reverse().map((day) => (
                 <tr 
                   key={day.date}
                   className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"

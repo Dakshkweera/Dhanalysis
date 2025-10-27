@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import TimePeriodSelector from '../../../components/reports/TimePeriodSelector';
 import { TrendingDown, Activity, Target, AlertTriangle, TrendingUp } from 'lucide-react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
 
@@ -11,7 +11,7 @@ function RiskAnalysis() {
   const [selectedPeriod, setSelectedPeriod] = useState('1Y');
   const [loading, setLoading] = useState(true);
   const [snapshots, setSnapshots] = useState<any[]>([]);
-  const [investments, setInvestments] = useState<any[]>([]);
+  const [_investments, setInvestments] = useState<any[]>([]);
   const [riskMetrics, setRiskMetrics] = useState<any>(null);
 
   useEffect(() => {

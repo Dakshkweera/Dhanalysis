@@ -215,7 +215,7 @@ function SellSharesModal({ investment, isOpen, onClose, onSuccess }: SellSharesM
               </div>
 
               <div className="space-y-2">
-                {fifoPreview.map((txn, index) => (
+                {fifoPreview.map((txn) => (
                   <div 
                     key={txn._id}
                     className="bg-white dark:bg-gray-800 rounded p-3 text-xs border border-orange-200 dark:border-orange-800"

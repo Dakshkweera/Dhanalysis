@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Wallet, BarChart3, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 function Dashboard() {
   const [summary, setSummary] = useState<any>(null);
@@ -116,6 +116,9 @@ function Dashboard() {
       console.error('Error fetching dashboard data:', err);
       toast.error(err.message || 'Failed to load dashboard data');
     } finally {
+      if (loading) {
+        return <div>Loading...</div>;
+      }
       setLoading(false);
     }
   };
