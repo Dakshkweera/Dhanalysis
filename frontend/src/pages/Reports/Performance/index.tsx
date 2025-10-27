@@ -34,7 +34,7 @@ function Performance() {
       
       // Fetch history snapshots
       const historyRes = await fetch(
-        `http://localhost:5000/api/portfolio/history?userId=${userId}&days=${days}`,
+        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=${days}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status}: ${historyRes.statusText}`);
@@ -42,7 +42,7 @@ function Performance() {
       
       // Fetch investments
       const investmentsRes = await fetch(
-        `http://localhost:5000/api/investments/${userId}`,
+        `https://dhanalysis.onrender.com/api/investments/${userId}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (!investmentsRes.ok) throw new Error(`Failed to fetch investments`);

@@ -58,7 +58,7 @@ function BuyStockModal({ isOpen, onClose, onSuccess }: BuyStockModalProps) {
       const userId = localStorage.getItem('userId');
       const token = localStorage.getItem('firebaseToken');
 
-      const response = await fetch('http://localhost:5000/api/investments/add-investment', {
+      const response = await fetch('https://dhanalysis.onrender.com/api/investments/add-investment', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -24,7 +24,7 @@ function Onboarding() {
         throw new Error('Please login first');
       }
 
-      const response = await fetch('http://localhost:5000/api/users/update-profile', {
+      const response = await fetch('https://dhanalysis.onrender.com/api/users/update-profile', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

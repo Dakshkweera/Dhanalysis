@@ -22,7 +22,7 @@ function Overview() {
       }
       // Always get ALL data, pick the latest one
       const historyRes = await fetch(
-        `http://localhost:5000/api/portfolio/history?userId=${userId}&days=10000`,
+        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=10000`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status}: ${historyRes.statusText}`);

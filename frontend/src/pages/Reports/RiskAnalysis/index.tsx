@@ -30,13 +30,13 @@ function RiskAnalysis() {
       const days = getPeriodDays(selectedPeriod);
       
       const historyRes = await fetch(
-        `http://localhost:5000/api/portfolio/history?userId=${userId}&days=${days}`,
+        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=${days}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const historyData = await historyRes.json();
       
       const investmentsRes = await fetch(
-        `http://localhost:5000/api/investments/${userId}`,
+        `https://dhanalysis.onrender.com/api/investments/${userId}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const investmentsData = await investmentsRes.json();

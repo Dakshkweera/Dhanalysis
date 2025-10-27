@@ -19,7 +19,7 @@ function Signup() {
     const user = userCredential.user;
     const token = await user.getIdToken();
 
-    const response = await fetch('http://localhost:5000/api/users/create', {
+    const response = await fetch('https://dhanalysis.onrender.com/api/users/create', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

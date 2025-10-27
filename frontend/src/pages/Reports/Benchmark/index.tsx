@@ -118,7 +118,7 @@ function Benchmark() {
       const days = PERIOD_DAYS[selectedPeriod] || 30;
 
       const response = await fetch(
-        `http://localhost:5000/api/portfolio/history?userId=${userId}&days=${days}`,
+        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=${days}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

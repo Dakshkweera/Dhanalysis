@@ -24,7 +24,7 @@ function Settings() {
 
   const loadUsageStats = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/ai/usage/${userId}`);
+      const response = await fetch(`https://dhanalysis.onrender.com/api/ai/usage/${userId}`);
       const data = await response.json();
       if (data.success) {
         setUsageStats(data.usage);
