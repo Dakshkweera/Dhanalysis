@@ -6,10 +6,24 @@ import cors from "cors";
 
 const app = express();
 // app.use(cors());
+const allowedOrigins = [
+  'https://dhanalysis.vercel.app',
+  'https://dhanalysis-git-main-daksh-kweeras-projects.vercel.app',
+  'https://dhanalysis-obm4m5360-daksh-kweeras-projects.vercel.app',
+  'http://localhost:5173'
+];
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? 'https://dhanalysis.vercel.app'
-    : 'http://localhost:5173'
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, SSR)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
 }));
 
 
