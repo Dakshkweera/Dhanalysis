@@ -5,7 +5,7 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
-// app.use(cors());
+// app.use(cors());a
 const allowedOrigins = [
   'https://dhanalysis.vercel.app',
   'https://dhanalysis-git-main-daksh-kweeras-projects.vercel.app',
