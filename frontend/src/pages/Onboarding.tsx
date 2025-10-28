@@ -24,7 +24,7 @@ function Onboarding() {
         throw new Error('Please login first');
       }
 
-      const response = await fetch('${import.meta.env.VITE_API_BASE_URL}/users/update-profile', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/users/update-profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
