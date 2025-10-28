@@ -19,7 +19,7 @@ function Signup() {
     const user = userCredential.user;
     const token = await user.getIdToken();
 
-    const response = await fetch('${import.meta.env.VITE_API_BASE_URL}/users/create', {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/users/create`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
