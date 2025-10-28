@@ -118,7 +118,7 @@ function Benchmark() {
       const days = PERIOD_DAYS[selectedPeriod] || 30;
 
       const response = await fetch(
-        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=${days}`,
+        `${import.meta.env.VITE_API_BASE_URL}/portfolio/history?userId=${userId}&days=${days}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

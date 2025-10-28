@@ -67,7 +67,7 @@ function Investments() {
       }
 
       const invResponse = await fetch(
-        `https://dhanalysis.onrender.com/api/investments/${userId}`,
+        `${import.meta.env.VITE_API_BASE_URL}/investments/${userId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -82,7 +82,7 @@ function Investments() {
       }
 
       const summaryResponse = await fetch(
-        `https://dhanalysis.onrender.com/api/portfolio/summary?userId=${userId}`,
+        `${import.meta.env.VITE_API_BASE_URL}/portfolio/summary?userId=${userId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -141,7 +141,7 @@ function Investments() {
       const userId = localStorage.getItem('userId');
       const token = localStorage.getItem('firebaseToken');
 
-      const response = await fetch('https://dhanalysis.onrender.com/api/investments/batch-process', {
+      const response = await fetch('${import.meta.env.VITE_API_BASE_URL}/investments/batch-process', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

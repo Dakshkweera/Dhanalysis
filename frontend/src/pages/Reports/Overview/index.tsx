@@ -22,7 +22,7 @@ function Overview() {
       }
       // Always get ALL data, pick the latest one
       const historyRes = await fetch(
-        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=10000`,
+        `${import.meta.env.VITE_API_BASE_URL}/portfolio/history?userId=${userId}&days=10000`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status}: ${historyRes.statusText}`);

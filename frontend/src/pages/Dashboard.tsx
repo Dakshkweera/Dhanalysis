@@ -39,7 +39,7 @@ function Dashboard() {
 
       // 1. Fetch portfolio summary
       const summaryResponse = await fetch(
-        `https://dhanalysis.onrender.com/api/portfolio/summary?userId=${userId}`,
+        `${import.meta.env.VITE_API_BASE_URL}/portfolio/summary?userId=${userId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -56,7 +56,7 @@ function Dashboard() {
 
       // 2. Fetch portfolio allocation
       const allocationResponse = await fetch(
-        `https://dhanalysis.onrender.com/api/portfolio/allocation?userId=${userId}`,
+        `${import.meta.env.VITE_API_BASE_URL}/portfolio/allocation?userId=${userId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -73,7 +73,7 @@ function Dashboard() {
 
       // 3. Fetch last 7 days history for today's change
       const historyResponse = await fetch(
-        `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}&days=7`,
+        `${import.meta.env.VITE_API_BASE_URL}/portfolio/history?userId=${userId}&days=7`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -99,7 +99,7 @@ function Dashboard() {
 
       // 4. Fetch NIFTY today data
       try {
-        const niftyResponse = await fetch('https://dhanalysis.onrender.com/api/market/nifty');
+        const niftyResponse = await fetch('${import.meta.env.VITE_API_BASE_URL}/market/nifty');
         const niftyData = await niftyResponse.json();
         
         if (niftyData.success && niftyData.nifty) {
@@ -130,8 +130,8 @@ function Dashboard() {
     const userId = localStorage.getItem('userId');
     const token = localStorage.getItem('firebaseToken');
 
-    let historyUrl = `https://dhanalysis.onrender.com/api/portfolio/history?userId=${userId}`;
-    let niftyUrl = `https://dhanalysis.onrender.com/api/market/nifty`;
+    let historyUrl = `${import.meta.env.VITE_API_BASE_URL}/portfolio/history?userId=${userId}`;
+    let niftyUrl = `${import.meta.env.VITE_API_BASE_URL}/market/nifty`;
     
     let daysToFetch = rangeValue;
 

@@ -44,7 +44,7 @@ const AIInsights: React.FC = () => {
 
   const loadUsageStats = async () => {
     try {
-      const response = await fetch(`https://dhanalysis.onrender.com/api/ai/usage/${userId}`);
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/ai/usage/${userId}`);
       const data = await response.json();
       
       if (data.success) {
@@ -58,7 +58,7 @@ const AIInsights: React.FC = () => {
   const loadChatHistory = async () => {
     try {
       const response = await fetch(
-        `https://dhanalysis.onrender.com/api/ai/history/${userId}?limit=20`
+        `${import.meta.env.VITE_API_BASE_URL}/ai/history/${userId}?limit=20`
       );
       const data = await response.json();
 
@@ -100,7 +100,7 @@ const AIInsights: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('https://dhanalysis.onrender.com/api/ai/chat', {
+      const response = await fetch('${import.meta.env.VITE_API_BASE_URL}/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
