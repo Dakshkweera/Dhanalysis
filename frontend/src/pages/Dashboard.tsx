@@ -99,7 +99,7 @@ function Dashboard() {
 
       // 4. Fetch NIFTY today data
       try {
-        const niftyResponse = await fetch('${import.meta.env.VITE_API_BASE_URL}/market/nifty');
+        const niftyResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/market/nifty`);
         const niftyData = await niftyResponse.json();
         
         if (niftyData.success && niftyData.nifty) {

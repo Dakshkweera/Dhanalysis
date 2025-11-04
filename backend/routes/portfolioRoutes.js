@@ -13,7 +13,7 @@ const router = express.Router();
 // GET Portfolio Summary
 // TEMPORARY: Without middleware for testing (remove verifyToken)
 router.get('/summary', verifyFirebaseToken ,validateUserId, getPortfolioSummary);
-router.post('/snapshot', verifyFirebaseToken  , validateUserId, createDailySnapshot);
+router.post('/snapshot'/*, verifyFirebaseToken */ , validateUserId, createDailySnapshot);
 router.get('/history',verifyFirebaseToken ,validateUserId, validateDateRange, getPortfolioHistory);
 router.get('/allocation',verifyFirebaseToken ,validateUserId, getPortfolioAllocation);
 
