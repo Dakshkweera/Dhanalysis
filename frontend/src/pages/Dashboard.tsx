@@ -176,11 +176,10 @@ function Dashboard() {
       
       setChartData(formattedData);
 
-      // Calculate Your Return (first to last)
-      const firstSnapshot = data.data[0];
+      // Your Return = last snapshot ROI (total return on all invested capital)
+      // Simple and honest: how much % profit/loss on everything you put in
       const lastSnapshot = data.data[data.data.length - 1];
-      
-      const portfolioReturn = ((lastSnapshot.portfolioValue - firstSnapshot.portfolioValue) / firstSnapshot.portfolioValue) * 100;
+      const portfolioReturn = lastSnapshot.roi ?? 0;
 
       console.log('Portfolio Return:', portfolioReturn.toFixed(2) + '%');
 

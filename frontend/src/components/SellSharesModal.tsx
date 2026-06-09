@@ -79,7 +79,7 @@ function SellSharesModal({ investment, isOpen, onClose, onSuccess }: SellSharesM
         if (txn.willBeDeleted) {
           // DELETE entire investment
           const deleteResponse = await fetch(
-            `https://dhanalysis.onrender.com/api/investments/delete/${txn._id}`,
+            `${import.meta.env.VITE_API_BASE_URL}/investments/delete/${txn._id}`,
             {
               method: 'DELETE',
               headers: {
@@ -97,7 +97,7 @@ function SellSharesModal({ investment, isOpen, onClose, onSuccess }: SellSharesM
         } else {
           // EDIT (reduce quantity)
           const editResponse = await fetch(
-            `https://dhanalysis.onrender.com/api/investments/edit/${txn._id}`,
+            `${import.meta.env.VITE_API_BASE_URL}/investments/edit/${txn._id}`,
             {
               method: 'PUT',
               headers: {

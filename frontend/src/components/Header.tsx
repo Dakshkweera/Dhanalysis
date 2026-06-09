@@ -31,8 +31,15 @@ function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {  // ✅ ADDED i
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/logout`, {
+        method: 'POST', credentials: 'include',
+      });
+    } catch { /* ignore */ }
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('firebaseToken');
+    localStorage.removeItem('authUser');
     localStorage.removeItem('userId');
     navigate('/login');
   };

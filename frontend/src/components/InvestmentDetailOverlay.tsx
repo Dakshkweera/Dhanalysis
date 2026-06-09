@@ -1,19 +1,52 @@
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface InvestmentDetailOverlayProps {
   investment: any;
   isOpen: boolean;
   onClose: () => void;
   onSellClick: () => void;
+  onDeleteSuccess: () => void;
 }
 
-function InvestmentDetailOverlay({ 
-  investment, 
-  isOpen, 
+function InvestmentDetailOverlay({
+  investment,
+  isOpen,
   onClose,
-  onSellClick 
+  onSellClick,
+  onDeleteSuccess
 }: InvestmentDetailOverlayProps) {
-  
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (txnId: string) => {
+    if (!window.confirm('Delete this transaction? This cannot be undone.')) return;
+
+    setDeleting(true);
+    try {
+      const token = localStorage.getItem('firebaseToken');
+      const res = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/investments/delete/${txnId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Investment deleted');
+        onClose();
+        onDeleteSuccess();
+      } else {
+        toast.error(data.message || 'Failed to delete');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (!isOpen || !investment) return null;
 
   const isProfit = investment.roi >= 0;
@@ -145,20 +178,30 @@ function InvestmentDetailOverlay({
                         Transaction #{index + 1}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(txn.buyDate).toLocaleDateString('en-IN', { 
+                        {new Date(txn.buyDate).toLocaleDateString('en-IN', {
                           day: 'numeric',
-                          month: 'short', 
-                          year: 'numeric' 
+                          month: 'short',
+                          year: 'numeric'
                         })}
                       </p>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded ${
-                      isPositive
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                    }`}>
-                      {isPositive ? '+' : ''}{txnROI.toFixed(2)}%
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                        isPositive
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      }`}>
+                        {isPositive ? '+' : ''}{txnROI.toFixed(2)}%
+                      </span>
+                      <button
+                        onClick={() => handleDelete(txn._id)}
+                        disabled={deleting}
+                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Delete transaction"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-sm">

@@ -1,286 +1,230 @@
+// backend/jobs/dailySnapshotCron.js
+// Daily portfolio snapshot cron — runs Mon-Fri at 3:35 PM IST.
+//
+// Key design:
+//   1. Collect ALL unique symbols across ALL users
+//   2. Fetch prices ONCE via priceStoreService.bulkRefresh (deduped)
+//   3. Build each user's snapshot from the shared price store
+//   4. Send emails in parallel (Promise.allSettled)
+
 import cron from 'node-cron';
 import User from '../models/User.js';
 import Investment from '../models/Investment.js';
 import DailyReport from '../models/DailyReport.js';
-import { getBatchStockPrices } from '../services/stockService.js';
-import { 
-  calculatePortfolioMetrics, 
-  findTopPerformers 
-} from '../services/portfolioService.js';
+import { bulkRefresh, getMany } from '../services/priceStoreService.js';
+import { calculatePortfolioMetrics, findTopPerformers } from '../services/portfolioService.js';
 import { sendPortfolioEmail } from '../services/emailService.js';
 import { calculateXIRR } from '../services/xirrService.js';
+import { getNiftyForDate } from '../services/niftyService.js';
+import { getISTDate, getISTTimestamp } from '../utils/timezone.js';
+import MarketBenchmark from '../models/MarketBenchmark.js';
+import {
+  calculateDailyChanges,
+  calculateDrawdown,
+  calculateBenchmarkComparison,
+  calculateStockPerformance,
+} from '../services/metricsCalculator.js';
+import { IST_TIMEZONE } from '../config/constants.js';
 
+// ── Single user snapshot ──────────────────────────────────────────────────────
 
-// Function to create snapshot for a single user
-const createSnapshotForUser = async (userId) => {
+const createSnapshotForUser = async (userId, priceMap, today) => {
   try {
-    console.log(`Creating snapshot for user: ${userId}`);
-    
-    // Get today's date in IST timezone
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istTime = new Date(now.getTime() + istOffset);
-    
-    const year = istTime.getUTCFullYear();
-    const month = istTime.getUTCMonth();
-    const day = istTime.getUTCDate();
-    
-    const today = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-    
-    // Check if snapshot already exists for today
-    const existingSnapshot = await DailyReport.findOne({
-      userId,
-      date: today
-    });
-    
-    if (existingSnapshot) {
-      console.log(`Snapshot already exists for user ${userId}`);
-      return { success: true, message: 'Snapshot already exists' };
+    console.log(`  📸 Snapshot: ${userId}`);
+
+    // Skip if already done today
+    const existing = await DailyReport.findOne({ userId, date: today });
+    if (existing) {
+      console.log(`  ⏭  Already exists for ${userId}`);
+      return { success: true, skipped: true };
     }
-    
-    // Fetch user
+
     const user = await User.findOne({ uid: userId });
-    
-    if (!user) {
-      console.log(`User not found: ${userId}`);
-      return { success: false, message: 'User not found' };
-    }
-    
-    // Fetch all investments
+    if (!user) return { success: false, message: 'User not found' };
+
     const investments = await Investment.find({ userId });
-    
+
     if (investments.length === 0) {
-      // Create empty snapshot
       await DailyReport.create({
         userId,
         date: today,
-        totalInvested: 0,
-        portfolioValue: 0,
-        profitLoss: 0,
-        roi: 0,
-        cagr: 0,
-        absoluteReturn: 0,
-        dailyChange: null,
-        topPerformers: { best: null, worst: null },
-        totalHoldings: 0,
-        benchmarkComparison: {}
+        totalInvested: 0, portfolioValue: 0,
+        profitLoss: 0, roi: 0, cagr: 0,
+        absoluteReturn: 0, totalHoldings: 0,
+        dailyReturn: 0, dailyProfitLoss: 0,
+        peakReturn: 0, currentDrawdown: 0,
+        benchmarkComparison: {}, stockPerformance: [],
       });
-      
-      console.log(`Empty snapshot created for user ${userId}`);
-      return { success: true, message: 'Empty snapshot created' };
+      return { success: true };
     }
-    
-    // Get unique symbols and fetch batch prices
-    const symbols = [...new Set(investments.map(inv => inv.symbol))];
-    const priceMap = await getBatchStockPrices(symbols);
-    
-    // Calculate portfolio metrics
-    const metrics = calculatePortfolioMetrics(
+
+    // Use shared price map (no extra API calls)
+    const metrics = calculatePortfolioMetrics(investments, priceMap, user.firstInvestmentDate);
+    const xirrValue = calculateXIRR(investments, metrics.currentValue, today);
+    const topPerformers = findTopPerformers(investments, priceMap);
+
+    // Yesterday's snapshot (handles weekends/holidays)
+    const yesterdaySnapshot = await DailyReport
+      .findOne({ userId, date: { $lt: today } })
+      .sort({ date: -1 })
+      .limit(1);
+
+    const stockPerformance = calculateStockPerformance(
       investments,
       priceMap,
-      user.firstInvestmentDate
+      yesterdaySnapshot?.stockPerformance,
+      metrics.currentValue
     );
 
-    // Calculate XIRR
-    const xirrValue = calculateXIRR(investments, metrics.currentValue);
+    const dailyChanges = calculateDailyChanges(stockPerformance);
+    const drawdown = calculateDrawdown(
+      metrics.currentValue,
+      metrics.totalInvested,
+      yesterdaySnapshot?.peakReturn ?? null
+    );
 
-    
-    // Find top performers
-    const topPerformers = findTopPerformers(investments, priceMap);
-    
-    // Find last available snapshot (handles weekends/holidays)
-    const lastSnapshot = await DailyReport.findOne({
-      userId,
-      date: { $lt: today }
-    })
-    .sort({ date: -1 })
-    .limit(1);
-    
-    const yesterdaySnapshot = lastSnapshot;
-    
-    // Calculate daily change with capital tracking
+    // Benchmark comparison
+    let benchmarkComparison = {};
+    try {
+      const todayBenchmark = await getNiftyForDate(today);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayBenchmark = await MarketBenchmark.findOne({ date: { $lte: yesterday } }).sort({ date: -1 }).limit(1);
+
+      const niftyDailyReturn = yesterdayBenchmark?.nifty50
+        ? ((todayBenchmark.nifty50 - yesterdayBenchmark.nifty50) / yesterdayBenchmark.nifty50) * 100
+        : todayBenchmark.nifty50Change || 0;
+
+      benchmarkComparison = calculateBenchmarkComparison(
+        dailyChanges.dailyReturn,
+        niftyDailyReturn,
+        todayBenchmark.nifty50
+      );
+    } catch (err) {
+      console.warn(`  ⚠️  Benchmark skipped for ${userId}: ${err.message}`);
+    }
+
+    // Daily change (capital-aware)
     let dailyChange = null;
     if (yesterdaySnapshot) {
       const portfolioValueChange = metrics.currentValue - yesterdaySnapshot.portfolioValue;
       const newCapitalAdded = metrics.totalInvested - yesterdaySnapshot.totalInvested;
       const marketChange = portfolioValueChange - newCapitalAdded;
-      
       const totalPercentage = (portfolioValueChange / yesterdaySnapshot.portfolioValue) * 100;
-      const marketChangePercentage = yesterdaySnapshot.portfolioValue > 0 
-        ? (marketChange / yesterdaySnapshot.portfolioValue) * 100 
+      const marketChangePercentage = yesterdaySnapshot.portfolioValue > 0
+        ? (marketChange / yesterdaySnapshot.portfolioValue) * 100
         : 0;
-      
       dailyChange = {
-        portfolioValue: parseFloat(portfolioValueChange.toFixed(2)),
-        percentage: parseFloat(totalPercentage.toFixed(2)),
-        newCapitalAdded: parseFloat(newCapitalAdded.toFixed(2)),
-        marketChange: parseFloat(marketChange.toFixed(2)),
-        marketChangePercentage: parseFloat(marketChangePercentage.toFixed(2))
+        portfolioValue:           parseFloat(portfolioValueChange.toFixed(2)),
+        percentage:               parseFloat(totalPercentage.toFixed(2)),
+        newCapitalAdded:          parseFloat(newCapitalAdded.toFixed(2)),
+        marketChange:             parseFloat(marketChange.toFixed(2)),
+        marketChangePercentage:   parseFloat(marketChangePercentage.toFixed(2)),
       };
     }
-    
-    // Create snapshot
+
     await DailyReport.create({
       userId,
       date: today,
-      totalInvested: metrics.totalInvested,
-      portfolioValue: metrics.currentValue,
-      profitLoss: metrics.profitLoss,
-      roi: metrics.roi,
-      cagr: metrics.cagr,
-      xirr: xirrValue,
-      absoluteReturn: metrics.absoluteReturn,
-      dailyChange: dailyChange,
-      topPerformers: {
-        best: topPerformers.best,
-        worst: topPerformers.worst
-      },
-      totalHoldings: metrics.totalHoldings,
-      benchmarkComparison: {}
+      totalInvested:     metrics.totalInvested,
+      portfolioValue:    metrics.currentValue,
+      profitLoss:        metrics.profitLoss,
+      roi:               metrics.roi,
+      cagr:              metrics.cagr,
+      xirr:              xirrValue,
+      absoluteReturn:    metrics.absoluteReturn,
+      totalHoldings:     metrics.totalHoldings,
+      dailyReturn:       dailyChanges.dailyReturn,
+      dailyProfitLoss:   dailyChanges.dailyProfitLoss,
+      peakReturn:        drawdown.peakReturn,
+      currentDrawdown:   drawdown.currentDrawdown,
+      benchmarkComparison,
+      stockPerformance,
+      dailyChange,
+      topPerformers: { best: topPerformers.best, worst: topPerformers.worst },
     });
-    
-    console.log(`Snapshot created successfully for user ${userId}`);
-    return { success: true, message: 'Snapshot created' };
-    
-  } catch (error) {
-    console.error(`Error creating snapshot for user ${userId}:`, error.message);
-    return { success: false, message: error.message };
+
+    console.log(`  ✅ Snapshot created: ${userId}`);
+    return { success: true };
+  } catch (err) {
+    console.error(`  ❌ Snapshot failed for ${userId}:`, err.message);
+    return { success: false, message: err.message };
   }
 };
 
-// Function to create snapshots for all users AND send emails
-const createDailySnapshotsForAllUsers = async () => {
+// ── Email for one user ────────────────────────────────────────────────────────
+
+const sendEmailForUser = async (userId, today) => {
   try {
-    console.log('\n=== Daily Snapshot Cron Job Started ===');
-    console.log('Time:', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
-    
-    // Get all unique user IDs from investments
-    const userIds = await Investment.distinct('userId');
-    
-    if (userIds.length === 0) {
-      console.log('No users with investments found');
-      return;
-    }
-    
-    console.log(`Found ${userIds.length} user(s) with investments`);
-    
-    // STEP 1: Create snapshots for each user
-    console.log('\n📸 Creating snapshots...');
-    const snapshotResults = await Promise.allSettled(
-      userIds.map(userId => createSnapshotForUser(userId))
-    );
-    
-    const snapshotsCreated = snapshotResults.filter(
-      r => r.status === 'fulfilled' && r.value.success
-    ).length;
-    
-    console.log(`✅ Snapshots: ${snapshotsCreated} successful\n`);
-    
-    // STEP 2: Send emails to each user
-    console.log('📧 Sending email notifications...');
-    
-    const emailResults = [];
-    
-    for (const userId of userIds) {
-      try {
-        // Get user details
-        const user = await User.findOne({ uid: userId });
-        
-        if (!user || !user.email) {
-          console.log(`⚠️  User ${userId}: No email set, skipping`);
-          emailResults.push({ userId, status: 'skipped', reason: 'no email' });
-          continue;
-        }
-        
-        // Check notification preference
-        if (user.notifications && user.notifications.email === false) {
-          console.log(`⚠️  User ${userId}: Notifications disabled, skipping`);
-          emailResults.push({ userId, status: 'skipped', reason: 'disabled' });
-          continue;
-        }
-        
-        // Get today's snapshot (using IST timezone)
-        const now = new Date();
-        const istOffset = 5.5 * 60 * 60 * 1000;
-        const istTime = new Date(now.getTime() + istOffset);
-        const year = istTime.getUTCFullYear();
-        const month = istTime.getUTCMonth();
-        const day = istTime.getUTCDate();
-        const todayDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-        
-        const snapshot = await DailyReport.findOne({
-          userId: userId,
-          date: todayDate
-        });
-        
-        if (!snapshot) {
-          console.log(`⚠️  User ${userId}: No snapshot found for today, skipping`);
-          emailResults.push({ userId, status: 'skipped', reason: 'no snapshot' });
-          continue;
-        }
-        
-        // Send email
-        const result = await sendPortfolioEmail(
-          user.email,
-          user.name || 'User',
-          snapshot
-        );
-        
-        if (result.success) {
-          emailResults.push({ userId, status: 'sent', email: user.email });
-        } else {
-          emailResults.push({ userId, status: 'failed', error: result.error });
-        }
-        
-      } catch (error) {
-        console.error(`❌ Error sending email for user ${userId}:`, error.message);
-        emailResults.push({ userId, status: 'error', error: error.message });
-      }
-    }
-    
-    // Log email results
-    const emailsSent = emailResults.filter(r => r.status === 'sent').length;
-    const emailsSkipped = emailResults.filter(r => r.status === 'skipped').length;
-    const emailsFailed = emailResults.filter(r => r.status === 'failed' || r.status === 'error').length;
-    
-    console.log(`\n📧 Email Results:`);
-    console.log(`   ✅ Sent: ${emailsSent}`);
-    console.log(`   ⚠️  Skipped: ${emailsSkipped}`);
-    console.log(`   ❌ Failed: ${emailsFailed}`);
-    
-    console.log('\n=== Daily Snapshot Cron Job Completed ===\n');
-    
-  } catch (error) {
-    console.error('Error in daily snapshot cron job:', error);
+    const user = await User.findOne({ uid: userId });
+    if (!user?.email) return { userId, status: 'skipped', reason: 'no email' };
+    if (user.notifications?.email === false) return { userId, status: 'skipped', reason: 'disabled' };
+
+    const snapshot = await DailyReport.findOne({ userId, date: today });
+    if (!snapshot) return { userId, status: 'skipped', reason: 'no snapshot' };
+
+    const result = await sendPortfolioEmail(user.email, user.name || 'User', snapshot);
+    return result.success
+      ? { userId, status: 'sent' }
+      : { userId, status: 'failed', error: result.error };
+  } catch (err) {
+    return { userId, status: 'error', error: err.message };
   }
 };
 
-// Schedule cron job: Run at 3:35 PM IST, Monday to Friday '0 18 * * *'
-const startDailySnapshotCron = () => {
-  cron.schedule('35 15 * * 1-5', async () => {
-    await createDailySnapshotsForAllUsers();
-  }, {
-    timezone: "Asia/Kolkata"
-  });
-  
-  console.log('✅ Daily Snapshot Cron Job scheduled: 3:35 PM IST (Mon-Fri)');
+// ── Main job ──────────────────────────────────────────────────────────────────
+
+const runDailyJob = async () => {
+  console.log('\n=== Daily Snapshot Cron Started ===');
+  console.log('Time:', getISTTimestamp());
+
+  const today = getISTDate();
+
+  // All users with at least one investment
+  const userIds = await Investment.distinct('userId');
+  if (userIds.length === 0) {
+    console.log('No users with investments. Exiting.');
+    return;
+  }
+  console.log(`Found ${userIds.length} user(s) with investments`);
+
+  // ── Step 1: Fetch all unique symbols ONCE ──────────────────────────────────
+  const allInvestments = await Investment.find({ userId: { $in: userIds } }).select('symbol');
+  const uniqueSymbols = [...new Set(allInvestments.map(i => i.symbol))];
+  console.log(`\n📦 Unique symbols across all users: ${uniqueSymbols.length}`);
+
+  const priceMap = await bulkRefresh(uniqueSymbols);
+
+  // ── Step 2: Create snapshots (sequential to avoid DB hammering) ────────────
+  console.log('\n📸 Creating snapshots...');
+  let snapshotsOk = 0;
+  for (const userId of userIds) {
+    const result = await createSnapshotForUser(userId, priceMap, today);
+    if (result.success) snapshotsOk++;
+  }
+  console.log(`✅ Snapshots: ${snapshotsOk}/${userIds.length} successful`);
+
+  // ── Step 3: Send emails IN PARALLEL ───────────────────────────────────────
+  console.log('\n📧 Sending emails...');
+  const emailResults = await Promise.allSettled(
+    userIds.map(userId => sendEmailForUser(userId, today))
+  );
+
+  const sent    = emailResults.filter(r => r.status === 'fulfilled' && r.value.status === 'sent').length;
+  const skipped = emailResults.filter(r => r.status === 'fulfilled' && r.value.status === 'skipped').length;
+  const failed  = emailResults.filter(r => r.status !== 'fulfilled' || r.value.status === 'failed' || r.value.status === 'error').length;
+
+  console.log(`📧 Emails — Sent: ${sent} | Skipped: ${skipped} | Failed: ${failed}`);
+  console.log('=== Daily Snapshot Cron Completed ===\n');
 };
 
-// For testing: Run every minute
-const startTestCron = () => {
-  cron.schedule('* * * * *', async () => {
-    console.log('🧪 TEST MODE: Running snapshot creation...');
-    await createDailySnapshotsForAllUsers();
-  }, {
-    timezone: "Asia/Kolkata"
-  });
-  
-  console.log('🧪 TEST MODE: Cron running every minute');
+// ── Schedule ──────────────────────────────────────────────────────────────────
+
+export const startDailySnapshotCron = () => {
+  // Mon-Fri at 3:35 PM IST (after NSE market close at 3:30 PM)
+  cron.schedule('35 15 * * 1-5', runDailyJob, { timezone: IST_TIMEZONE });
+  console.log(`✅ Cron scheduled: 3:35 PM IST (Mon-Fri)`);
 };
 
-// Export functions
-export { 
-  startDailySnapshotCron, 
-  startTestCron,
-  createDailySnapshotsForAllUsers 
-};
+// For manual trigger via API (useful for testing on Render)
+export const triggerManualSnapshot = runDailyJob;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { fetchWithAuth } from '../utils/fetchWithAuth';
 
 interface BuyStockModalProps {
   isOpen: boolean;
@@ -8,69 +9,59 @@ interface BuyStockModalProps {
   onSuccess: () => void;
 }
 
+const today = new Date().toISOString().split('T')[0];
+
 function BuyStockModal({ isOpen, onClose, onSuccess }: BuyStockModalProps) {
   const [formData, setFormData] = useState({
     symbol: '',
     type: 'Stock',
     quantity: '',
-    buyPrice: '',
-    buyDate: ''
+    buyDate: '',
+    buyPrice: ''
   });
   const [loading, setLoading] = useState(false);
+  const [priceMode, setPriceMode] = useState<'auto' | 'manual'>('auto');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation
+
     if (!formData.symbol.trim()) {
       toast.error('Please enter stock symbol');
       return;
     }
-    
     if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
       toast.error('Please enter valid quantity');
       return;
     }
-    
-    if (!formData.buyPrice || parseFloat(formData.buyPrice) <= 0) {
-      toast.error('Please enter valid buy price');
-      return;
-    }
-    
     if (!formData.buyDate) {
       toast.error('Please select buy date');
       return;
     }
 
-    // Validate buy date is not in future
-    const selectedDate = new Date(formData.buyDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    if (selectedDate > today) {
-      toast.error('Buy date cannot be in the future');
+    // Block weekends instantly
+    const selectedDay = new Date(formData.buyDate).getUTCDay();
+    if (selectedDay === 0 || selectedDay === 6) {
+      toast.error('Markets are closed on weekends. Please select a weekday.');
       return;
     }
+
 
     setLoading(true);
 
     try {
       const userId = localStorage.getItem('userId');
-      const token = localStorage.getItem('firebaseToken');
 
-      const response = await fetch('https://dhanalysis.onrender.com/api/investments/add-investment', {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/investments/add-investment`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           userId,
-          symbol: formData.symbol.toUpperCase().trim(),
-          type: formData.type,
+          symbol:   formData.symbol.toUpperCase().trim(),
+          type:     formData.type,
           quantity: parseFloat(formData.quantity),
-          buyPrice: parseFloat(formData.buyPrice),
-          buyDate: formData.buyDate
+          buyDate:  formData.buyDate,
+          ...(priceMode === 'manual' && formData.buyPrice
+            ? { buyPrice: parseFloat(formData.buyPrice) }
+            : {})
         })
       });
 
@@ -82,45 +73,26 @@ function BuyStockModal({ isOpen, onClose, onSuccess }: BuyStockModalProps) {
 
       const data = await response.json();
 
-      // Check backend success flag
       if (data.success || data.investment) {
-        toast.success('Investment added successfully! ✅');
-        
-        // Reset form
-        setFormData({
-          symbol: '',
-          type: 'Stock',
-          quantity: '',
-          buyPrice: '',
-          buyDate: ''
-        });
-        
-        // Call success callback and close modal
-        onSuccess();
+        toast.success('Investment added! Charts updating... ✅');
+        setFormData({ symbol: '', type: 'Stock', quantity: '', buyDate: '' });
         onClose();
+        // Small delay for backfill to start, then refresh list
+        setTimeout(() => onSuccess(), 1500);
+      } else if (data.code === 'NOT_TRADING_DAY') {
+        toast.error(`📅 ${data.error}`);
+      } else if (data.code === 'PRO_FEATURE') {
+        toast.error(`🔒 ${data.proMessage || 'This is a Pro feature'}`);
       } else if (data.error) {
-        // Backend returned error message
-        if (data.error.includes('Invalid') || data.error.includes('incomplete')) {
-          toast.error('❌ Invalid stock symbol. Please check and try again.');
-        } else if (data.error.includes('date')) {
-          toast.error('❌ Invalid buy date. Please select a valid past date.');
-        } else {
-          toast.error(data.error);
-        }
+        toast.error(data.error);
       } else {
         throw new Error('Unexpected response format');
       }
 
     } catch (err: any) {
       console.error('Error adding investment:', err);
-      
-      // User-friendly error messages
       if (err.message.includes('Failed to fetch')) {
         toast.error('❌ Cannot connect to server. Is backend running?');
-      } else if (err.message.includes('Invalid') || err.message.includes('incomplete')) {
-        toast.error('❌ Invalid stock symbol. Please enter correct ticker (e.g., TCS.NS)');
-      } else if (err.message.includes('401') || err.message.includes('403')) {
-        toast.error('❌ Session expired. Please login again.');
       } else {
         toast.error(`❌ ${err.message || 'Failed to add investment'}`);
       }
@@ -207,22 +179,6 @@ function BuyStockModal({ isOpen, onClose, onSuccess }: BuyStockModalProps) {
             />
           </div>
 
-          {/* Buy Price Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Buy Price (₹) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              value={formData.buyPrice}
-              onChange={(e) => setFormData({ ...formData, buyPrice: e.target.value })}
-              placeholder="e.g., 3500"
-              min="0.01"
-              step="0.01"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
           {/* Buy Date Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -232,22 +188,51 @@ function BuyStockModal({ isOpen, onClose, onSuccess }: BuyStockModalProps) {
               type="date"
               value={formData.buyDate}
               onChange={(e) => setFormData({ ...formData, buyDate: e.target.value })}
-              max={new Date().toISOString().split('T')[0]}
+              max={today}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
-          {/* Total Investment Preview */}
-          {formData.quantity && formData.buyPrice && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Total Investment
-              </p>
-              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                ₹{(parseFloat(formData.quantity) * parseFloat(formData.buyPrice)).toLocaleString()}
-              </p>
+          {/* Price mode toggle */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">Buy Price</p>
+              <div className="flex gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPriceMode('auto')}
+                  className={`px-2 py-0.5 rounded ${priceMode === 'auto' ? 'bg-blue-500 text-white' : 'text-blue-600 dark:text-blue-400 hover:underline'}`}
+                >
+                  Auto-fetch
+                </button>
+                <span className="text-blue-400">|</span>
+                <button
+                  type="button"
+                  onClick={() => setPriceMode('manual')}
+                  className={`px-2 py-0.5 rounded ${priceMode === 'manual' ? 'bg-blue-500 text-white' : 'text-blue-600 dark:text-blue-400 hover:underline'}`}
+                >
+                  Enter manually
+                </button>
+              </div>
             </div>
-          )}
+
+            {priceMode === 'auto' ? (
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                💡 Price will be fetched from market data for the selected date.
+              </p>
+            ) : (
+              <input
+                type="number"
+                value={formData.buyPrice}
+                onChange={e => setFormData({ ...formData, buyPrice: e.target.value })}
+                placeholder="Enter buy price (₹)"
+                min="0.01"
+                step="0.01"
+                required={priceMode === 'manual'}
+                className="w-full mt-1 px-3 py-1.5 border border-blue-300 dark:border-blue-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-blue-500"
+              />
+            )}
+          </div>
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4">

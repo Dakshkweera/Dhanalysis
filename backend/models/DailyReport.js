@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 const stockPerformanceSchema = new mongoose.Schema({
   symbol: { type: String, required: true },
   quantity: { type: Number, required: true },
+  buyPrice: { type: Number, default: 0 },      // avg cost basis — enables per-stock ROI from snapshot alone
   currentPrice: { type: Number, required: true },
   previousPrice: { type: Number, default: null },
   value: { type: Number, required: true },

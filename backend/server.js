@@ -1,60 +1,67 @@
-import express from "express";
-import app from "./app.js";
-import connectDB from "./config/db.js";
-import dotenv from "dotenv";
+// backend/server.js
+// Entry point — validates env first, then connects DB, starts cron, mounts routes.
 
-// Import cron jobs
-import { startDailySnapshotCron, startTestCron } from './jobs/dailySnapshotCron.js';
+import './config/env.js'; // ← MUST be first: validates all required env vars before anything else
+import config from './config/env.js';
 
+import app from './app.js';
+import connectDB from './config/db.js';
+
+import { startDailySnapshotCron, triggerManualSnapshot } from './jobs/dailySnapshotCron.js';
+import { sendTestEmail } from './services/emailService.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
-// Import routes
-import userRoutes from "./routes/userRoutes.js";
-import investmentRoutes from "./routes/investmentRoutes.js";
-import portfolioRoutes from './routes/portfolioRoutes.js';
-import marketRoutes from './routes/marketRoutes.js';
-import analyticsRoutes from './routes/analyticsRoutes.js';
-import aiRoutes from './routes/aiRoutes.js';
-
-dotenv.config();
+import userRoutes       from './routes/userRoutes.js';
+import investmentRoutes from './routes/investmentRoutes.js';
+import portfolioRoutes  from './routes/portfolioRoutes.js';
+import marketRoutes     from './routes/marketRoutes.js';
+import analyticsRoutes  from './routes/analyticsRoutes.js';
+import aiRoutes         from './routes/aiRoutes.js';
+import authRoutes        from './routes/authRoutes.js';
 
 // Mount routes
-app.use("/api/users", userRoutes);
-app.use("/api/investments", investmentRoutes);
-app.use('/api/portfolio', portfolioRoutes);
-app.use('/api/market', marketRoutes);
-app.use('/api/analytics', analyticsRoutes); 
-app.use('/api/ai', aiRoutes);
+app.use('/api/users',      userRoutes);
+app.use('/api/investments', investmentRoutes);
+app.use('/api/portfolio',  portfolioRoutes);
+app.use('/api/market',     marketRoutes);
+app.use('/api/analytics',  analyticsRoutes);
+app.use('/api/ai',         aiRoutes);
+app.use('/api/auth',       authRoutes);
 
-// 404 handler (must be AFTER all routes)
+// Dev-only: manual trigger endpoints for testing
+if (config.NODE_ENV !== 'production') {
+  app.post('/api/dev/trigger-snapshot', async (req, res) => {
+    console.log('🔧 Manual snapshot triggered via API');
+    triggerManualSnapshot().catch(err => console.error('Manual snapshot error:', err.message));
+    res.json({ success: true, message: 'Snapshot job started — check server logs' });
+  });
+
+  app.post('/api/dev/test-email', async (req, res) => {
+    const { to } = req.body;
+    if (!to) return res.status(400).json({ success: false, message: 'Provide { "to": "email@example.com" }' });
+    const result = await sendTestEmail(to);
+    res.json(result);
+  });
+}
+
+// 404 + global error handlers (must be after all routes)
 app.use(notFound);
-
-// Global error handler (must be LAST)
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-
-// Initialize server
 const startServer = async () => {
   try {
-    // 1. Connect to MongoDB first
     await connectDB();
-    
-    // 2. Start cron jobs after DB connection
+
     console.log('\n📅 Initializing Cron Jobs...');
-    // startTestCron();  // ← Testing mode (runs every minute)
-    startDailySnapshotCron();  // ← Production mode (uncomment for 3:35 PM Mon-Fri)
-    
-    // 3. Start Express server
-    app.listen(PORT, () => {
-      console.log(`📍 API: http://localhost:${PORT}\n`);
+    startDailySnapshotCron();
+
+    app.listen(config.PORT, () => {
+      console.log(`🚀 Server running on port ${config.PORT} [${config.NODE_ENV}]\n`);
     });
-    
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
     process.exit(1);
   }
 };
 
-// Start the server
 startServer();

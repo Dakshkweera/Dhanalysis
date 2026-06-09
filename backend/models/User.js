@@ -4,13 +4,18 @@ const userSchema = new mongoose.Schema({
   uid: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
   },
-  email: {                     
+  email: {
     type: String,
     required: true,
+    unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+  },
+  passwordHash: {
+    type:    String,
+    default: null,   // null for demo/legacy accounts
   },
   name: {                        // ← Added name field (required for onboarding)
     type: String,

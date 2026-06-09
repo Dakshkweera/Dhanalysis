@@ -41,8 +41,9 @@ function Overview() {
   };
 
   // Prepare metrics (till date: always latest)
-  const xirr = latestSnapshot?.xirr || 0;
-  const cagr = latestSnapshot?.cagr || 0;
+  // null = insufficient data (< 30 days holding or XIRR unconverged)
+  const xirr = latestSnapshot?.xirr ?? null;
+  const cagr = latestSnapshot?.cagr ?? null;
   const absoluteReturn = latestSnapshot?.profitLoss || 0;
   const roi = latestSnapshot?.roi || 0;
 
@@ -118,18 +119,18 @@ function Overview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
           title="XIRR"
-          value={`${xirr >= 0 ? '+' : ''}${xirr.toFixed(2)}%`}
-          subtitle="Annualized Return (till date)"
-          color={xirr >= 0 ? 'profit' : 'loss'}
-          trend={xirr >= 0 ? 'up' : 'down'}
+          value={xirr !== null ? `${xirr >= 0 ? '+' : ''}${xirr.toFixed(2)}%` : 'N/A'}
+          subtitle={xirr !== null ? 'Annualized Return (till date)' : 'Available after more history'}
+          color={xirr !== null ? (xirr >= 0 ? 'profit' : 'loss') : 'neutral'}
+          trend={xirr !== null ? (xirr >= 0 ? 'up' : 'down') : 'neutral'}
           icon="📈"
         />
         <MetricCard
           title="CAGR"
-          value={`${cagr >= 0 ? '+' : ''}${cagr.toFixed(2)}%`}
-          subtitle="Compound Growth Rate (till date)"
-          color={cagr >= 0 ? 'profit' : 'loss'}
-          trend={cagr >= 0 ? 'up' : 'down'}
+          value={cagr !== null ? `${cagr >= 0 ? '+' : ''}${cagr.toFixed(2)}%` : 'N/A'}
+          subtitle={cagr !== null ? 'Compound Growth Rate (till date)' : 'Available after 30 days'}
+          color={cagr !== null ? (cagr >= 0 ? 'profit' : 'loss') : 'neutral'}
+          trend={cagr !== null ? (cagr >= 0 ? 'up' : 'down') : 'neutral'}
           icon="📊"
         />
         <MetricCard

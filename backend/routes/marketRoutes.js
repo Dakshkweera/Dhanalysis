@@ -17,17 +17,12 @@ router.get('/nifty', async (req, res) => {
       startDate.setDate(startDate.getDate() - daysNum);
       
       const niftyData = await MarketBenchmark.find({
-        date: {
-          $gte: startDate.toISOString().split('T')[0],
-          $lte: endDate.toISOString().split('T')[0]
-        }
+        date: { $gte: startDate, $lte: endDate }
       }).sort({ date: 1 });
       
       if (!niftyData || niftyData.length === 0) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'NIFTY data not available for this period' 
-        });
+        // No cron has run yet — return empty array, not 404
+        return res.status(200).json({ success: true, data: [], summary: null });
       }
       
       // Format response
@@ -50,18 +45,18 @@ router.get('/nifty', async (req, res) => {
     }
     
     // If no days parameter, return today's data only
-    const today = new Date().toISOString().split('T')[0];
-    const niftyData = await MarketBenchmark.findOne({ date: today });
+    const now = new Date();
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const todayEnd   = new Date(todayStart.getTime() + 86400000);
+    const niftyData  = await MarketBenchmark.findOne({ date: { $gte: todayStart, $lt: todayEnd } });
     
     if (!niftyData) {
       // If today's data not available, get latest
       const latestNifty = await MarketBenchmark.findOne().sort({ date: -1 });
       
       if (!latestNifty) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'NIFTY data not available' 
-        });
+        // No NIFTY data yet — cron hasn't run. Return null gracefully.
+        return res.status(200).json({ success: true, nifty: null });
       }
       
       return res.status(200).json({

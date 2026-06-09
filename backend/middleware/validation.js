@@ -1,4 +1,3 @@
-import yahooFinance from 'yahoo-finance2';
 
 // ========== Investment Validation ==========
 export const validateInvestment = (req, res, next) => {
@@ -26,13 +25,8 @@ export const validateInvestment = (req, res, next) => {
     });
   }
   
-  if (!buyPrice) {
-    return res.status(400).json({ 
-      success: false,
-      error: 'Buy price is required' 
-    });
-  }
-  
+  // buyPrice is optional — auto-fetched from Yahoo Finance if not provided
+
   if (!buyDate) {
     return res.status(400).json({ 
       success: false,
@@ -48,14 +42,14 @@ export const validateInvestment = (req, res, next) => {
     });
   }
   
-  // Validate price
-  if (isNaN(buyPrice) || buyPrice <= 0) {
-    return res.status(400).json({ 
+  // Validate price only if provided manually
+  if (buyPrice && (isNaN(buyPrice) || buyPrice <= 0)) {
+    return res.status(400).json({
       success: false,
-      error: 'Buy price must be a positive number' 
+      error: 'Buy price must be a positive number'
     });
   }
-  
+
   // Validate type
   const allowedTypes = ['Stock', 'ETF', 'Mutual Fund'];
   if (!allowedTypes.includes(type)) {
@@ -170,77 +164,33 @@ export const validateDateRange = (req, res, next) => {
 };
 
 
-// ========== Stock Symbol Existence Validation ==========
-export const validateStockSymbol = async (req, res, next) => {
+// ========== Stock Symbol Format Validation ==========
+// Only checks format — no live API call.
+// If symbol doesn't exist on exchange, price fetch will return null naturally.
+export const validateStockSymbol = (req, res, next) => {
   const { symbol } = req.body;
-  
-  if (!symbol) {
-    return next();  // Let other validation catch this
+  if (!symbol) return next();
+
+  let clean = symbol.toUpperCase().trim();
+
+  // Auto-append .NS if no exchange suffix provided
+  if (!/\.(NS|BO|BSE)$/i.test(clean)) {
+    clean = `${clean}.NS`;
   }
-  
-  try {
-    console.log(`🔍 Validating symbol: ${symbol}`);
-    
-    // Try to fetch quote from Yahoo Finance
-    const quote = await yahooFinance.quote(symbol.toUpperCase().trim());
-    
-    // Check if quote has valid data
-    if (!quote || !quote.regularMarketPrice) {
-      console.error(`❌ Invalid or incomplete data for symbol: ${symbol}`);
-      return res.status(400).json({ 
-        success: false,
-        error: `Stock symbol "${symbol}" not found or has no price data.`,
-        suggestion: 'Please verify the symbol. For NSE stocks, use format: SYMBOL.NS (e.g., TCS.NS)'
-      });
-    }
-    
-    // Symbol exists and has price data!
-    console.log(`✅ Symbol validated: ${symbol} - ${quote.longName || quote.shortName || 'Unknown'} (₹${quote.regularMarketPrice})`);
-    
-    // Attach stock info to request
-    req.stockInfo = {
-      symbol: symbol.toUpperCase().trim(),
-      name: quote.longName || quote.shortName || symbol,
-      price: quote.regularMarketPrice
-    };
-    
-    next();
-    
-  } catch (error) {
-    // Symbol doesn't exist or API error
-    console.error(`❌ Symbol validation failed for ${symbol}:`, error.message);
-    
-    // Check error type
-    const errorMsg = error.message.toLowerCase();
-    
-    // Not found errors
-    if (errorMsg.includes('not found') || 
-        errorMsg.includes('404') || 
-        errorMsg.includes('no data found') ||
-        errorMsg.includes('invalid symbol') ||
-        errorMsg.includes('ticker symbol')) {
-      return res.status(400).json({ 
-        success: false,
-        error: `Stock symbol "${symbol}" not found on Yahoo Finance.`,
-        suggestion: 'Please verify the symbol. For NSE stocks, use format: SYMBOL.NS (e.g., TCS.NS)'
-      });
-    }
-    
-    // Network/API errors
-    if (errorMsg.includes('network') || 
-        errorMsg.includes('timeout') || 
-        errorMsg.includes('econnrefused') ||
-        errorMsg.includes('fetch failed')) {
-      console.warn(`⚠️ Network issue, allowing investment (will validate later)`);
-      return next();
-    }
-    
-    // For any other error, reject the symbol (safer)
-    return res.status(400).json({ 
+
+  const validFormat = /^[A-Z0-9&-]+\.(NS|BO|BSE)$/i.test(clean);
+
+  if (!validFormat) {
+    return res.status(400).json({
       success: false,
-      error: `Unable to validate stock symbol "${symbol}". Please verify it's correct.`,
-      details: 'The symbol may not exist or has incomplete data.',
-      suggestion: 'Try a well-known stock like TCS.NS or INFY.NS to test.'
+      error: `Invalid symbol format: "${symbol}"`,
+      suggestion: 'Use NSE format: SYMBOL.NS (e.g., TCS.NS, INFY.NS)',
     });
   }
+
+  // Write back corrected symbol so controller uses the fixed version
+  req.body.symbol = clean;
+  console.log(`✅ Symbol format valid: ${clean}`);
+  req.stockInfo = { symbol: clean };
+  next();
 };

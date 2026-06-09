@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { User, Bell, Shield, Database, Palette, Sparkles, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 interface UsageStats {
   questionsAsked: number;
@@ -38,6 +39,31 @@ function Settings() {
     localStorage.removeItem('firebaseToken');
     localStorage.removeItem('userId');
     navigate('/login');
+  };
+
+  const handleDeleteHistory = async () => {
+    if (!window.confirm(
+      '⚠️ Delete All Portfolio History?\n\n' +
+      'This will permanently delete all your daily snapshots and charts.\n' +
+      'Your investments will NOT be deleted.\n\n' +
+      'This cannot be undone. Continue?'
+    )) return;
+
+    try {
+      const token = localStorage.getItem('firebaseToken');
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/portfolio/history`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`✅ Deleted ${data.deletedCount} snapshots. History cleared.`);
+      } else {
+        toast.error(data.error || 'Failed to delete history');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    }
   };
 
   const tabs = [
@@ -403,10 +429,33 @@ function Settings() {
                 </h2>
 
                 <div className="space-y-4">
-                  <button className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 font-medium text-left">
+                  <button
+                    onClick={() => {
+                      const token = localStorage.getItem('firebaseToken');
+                      const uid   = localStorage.getItem('userId');
+                      // Direct browser download via anchor tag
+                      const a = document.createElement('a');
+                      a.href = `${import.meta.env.VITE_API_BASE_URL}/investments/export/${uid}`;
+                      // Pass token via URL won't work for auth — use fetch + blob instead
+                      fetch(`${import.meta.env.VITE_API_BASE_URL}/investments/export/${uid}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      })
+                        .then(r => r.blob())
+                        .then(blob => {
+                          const url = URL.createObjectURL(blob);
+                          a.href = url;
+                          a.download = 'dhanalysis-transactions.csv';
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toast.success('Transactions downloaded ✅');
+                        })
+                        .catch(() => toast.error('Download failed'));
+                    }}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 font-medium text-left"
+                  >
                     <div className="flex items-center justify-between">
-                      <span>Download Your Data</span>
-                      <span className="text-sm text-gray-500">Export as JSON</span>
+                      <span>Download Transactions</span>
+                      <span className="text-sm text-gray-500">Export as CSV</span>
                     </div>
                   </button>
 
@@ -418,15 +467,44 @@ function Settings() {
                   </button>
 
                   <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mt-8">
-                    <h3 className="font-semibold text-red-900 dark:text-red-400 mb-2">
+                    <h3 className="font-semibold text-red-900 dark:text-red-400 mb-4">
                       Danger Zone
                     </h3>
-                    <p className="text-sm text-red-700 dark:text-red-500 mb-4">
-                      Once you delete your account, there is no going back. Please be certain.
-                    </p>
-                    <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">
-                      Delete Account
-                    </button>
+
+                    {/* Delete Portfolio History */}
+                    <div className="mb-4 pb-4 border-b border-red-200 dark:border-red-800">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-red-900 dark:text-red-400">
+                            Delete Portfolio History
+                          </p>
+                          <p className="text-sm text-red-700 dark:text-red-500">
+                            Wipes all charts and snapshots. Your investments stay intact.
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleDeleteHistory}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium whitespace-nowrap ml-4"
+                        >
+                          Delete History
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Delete Account */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-red-900 dark:text-red-400">
+                          Delete Account
+                        </p>
+                        <p className="text-sm text-red-700 dark:text-red-500">
+                          Permanently deletes your account and all data.
+                        </p>
+                      </div>
+                      <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium whitespace-nowrap ml-4">
+                        Delete Account
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -1,37 +1,33 @@
-import dotenv from "dotenv";
-dotenv.config();
+// backend/app.js
+// Express app setup — middleware only, no route mounting (done in server.js).
 
-import express from "express";
-import cors from "cors";
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import config from './config/env.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
 
 const app = express();
-// app.use(cors());a
-const allowedOrigins = [
-  'https://dhanalysis.vercel.app',
-  'https://dhanalysis-git-main-daksh-kweeras-projects.vercel.app',
-  'https://dhanalysis-obm4m5360-daksh-kweeras-projects.vercel.app',
-  'http://localhost:5173'
-];
 
+// CORS — origins loaded from CORS_ORIGINS env var (comma-separated)
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, SSR)
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error('Not allowed by CORS'));
-    }
+    if (config.CORS_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS: origin '${origin}' not allowed`));
   },
-  credentials: true
+  credentials: true,
 }));
-
-
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-app.get("/", (req, res) => res.send("Backend running"));
+// Global rate limiter — protects all API routes
+app.use('/api', apiLimiter);
+
+// Health check
+app.get('/', (_req, res) => res.json({ status: 'ok', env: config.NODE_ENV }));
 
 export default app;
-

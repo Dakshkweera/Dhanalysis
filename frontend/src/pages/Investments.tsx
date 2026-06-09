@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, AlertCircle } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TickerStrip from '../components/TickerStrip';
 import BuyStockModal from '../components/BuyStockModal';
@@ -46,7 +46,6 @@ function Investments() {
   const [investments, setInvestments] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [showBuyModal, setShowBuyModal] = useState(false);
-  const [investmentAddedInSession, setInvestmentAddedInSession] = useState(false);
   const [selectedInvestment, setSelectedInvestment] = useState<any>(null);
   const [showDetailOverlay, setShowDetailOverlay] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
@@ -106,12 +105,10 @@ function Investments() {
 
   const handleBuySuccess = () => {
     fetchData();
-    setInvestmentAddedInSession(true);
   };
 
   const handleSellSuccess = () => {
     fetchData();
-    setInvestmentAddedInSession(true);
   };
 
   const handleCardClick = (investment: any) => {
@@ -124,53 +121,6 @@ function Investments() {
     setShowSellModal(true);
   };
 
-  const handleProcessHistory = async () => {
-    try {
-      const confirmed = window.confirm(
-        '⚠️ Regenerate Portfolio History?\n\n' +
-        'This will recalculate all historical snapshots based on your current investments.\n' +
-        'This may take 2-3 minutes.\n\n' +
-        'Continue?'
-      );
-
-      if (!confirmed) return;
-
-      setLoading(true);
-      toast.loading('Processing portfolio history...', { id: 'batch-process' });
-
-      const userId = localStorage.getItem('userId');
-      const token = localStorage.getItem('firebaseToken');
-
-      const response = await fetch('${import.meta.env.VITE_API_BASE_URL}/investments/batch-process', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process history');
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('✅ Portfolio history regenerated successfully!', { id: 'batch-process' });
-        setInvestmentAddedInSession(false);
-        await fetchData();
-      } else {
-        throw new Error(data.error || 'Failed to process history');
-      }
-
-    } catch (err: any) {
-      console.error('Error processing history:', err);
-      toast.error(`❌ ${err.message}`, { id: 'batch-process' });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -212,54 +162,22 @@ function Investments() {
         />
       )}
 
-      {/* Reminder Banner - Shows when investments added but not processed */}
-      {investmentAddedInSession && (
-        <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={24} />
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-300 mb-1">
-              📝 Reminder: Process Portfolio History
-            </h3>
-            <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-2">
-              You've added or modified investments. Make sure to add <strong>all your investments</strong> first, 
-              then click "Process History" to generate historical data and charts.
-            </p>
-            <p className="text-xs text-yellow-600 dark:text-yellow-500">
-              💡 <strong>Tip:</strong> Only process once after adding all investments to avoid multiple processing runs.
-            </p>
-          </div>
-        </div>
-      )}
-
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <button 
+        <button
           onClick={() => setShowBuyModal(true)}
           className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
         >
           <span className="text-xl">➕</span>
           Buy Stock
         </button>
-        
-        <input 
+
+        <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="🔍 Search by symbol or type..." 
+          placeholder="🔍 Search by symbol or type..."
           className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
-        
-        <button 
-          onClick={handleProcessHistory}
-          disabled={!investmentAddedInSession}
-          className={`px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-            investmentAddedInSession
-              ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          <span className="text-xl">✅</span>
-          Process History
-        </button>
       </div>
 
       {groupedInvestments.length === 0 ? (
@@ -350,6 +268,7 @@ function Investments() {
         isOpen={showDetailOverlay}
         onClose={() => setShowDetailOverlay(false)}
         onSellClick={handleSellClick}
+        onDeleteSuccess={fetchData}
       />
 
       <SellSharesModal

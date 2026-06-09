@@ -1,10 +1,39 @@
 // backend/services/analyticsService.js
+// Advanced risk analytics — reads from stored DailyReport snapshots in MongoDB.
+// All calculations are cash-flow-free (price movements only, not capital additions).
 
 import DailyReport from '../models/DailyReport.js';
+import { TRADING_DAYS_PER_YEAR, RISK_FREE_RATE, MIN_DAYS_FOR_ANALYTICS } from '../config/constants.js';
 
 /**
- * Calculate rolling metrics (volatility, Sharpe ratio, etc.) for a given period
- * FULLY CORRECTED: All cash-flow illusions removed
+ * calculateRollingMetrics
+ * -----------------------
+ * Answers: "How risky is this portfolio, and is the return worth the risk?"
+ *
+ * Reads the last N days of DailyReport snapshots and computes:
+ *
+ * VOLATILITY (annualised std deviation of daily returns)
+ *   How wildly does the portfolio swing day to day?
+ *   High = big swings. Low = stable.
+ *   We annualise by multiplying by √252 (252 trading days/year).
+ *
+ * SHARPE RATIO = (annualised return - risk-free rate) / annualised volatility
+ *   The most important risk metric: return per unit of risk.
+ *   > 1.0 = good. > 1.5 = great. < 0 = you'd have been better off in FD.
+ *   Risk-free rate = ~4% (Indian T-bill rate) — what you'd earn with zero risk.
+ *
+ * MAX DRAWDOWN
+ *   Worst peak-to-trough decline in the period.
+ *   e.g. portfolio was +20% in March, then fell to +5% in June → drawdown = -15%
+ *
+ * WIN RATE
+ *   % of days the portfolio went up. 50%+ is generally good.
+ *
+ * PROFIT FACTOR = avgGain / avgLoss
+ *   If you gain 2% on up days and lose 1% on down days → profit factor 2.0 (great)
+ *
+ * @param days - rolling window in calendar days (default 30)
+ * @param asOfDate - calculate as of this date (default today)
  */
 export const calculateRollingMetrics = async (userId, days = 30, asOfDate = new Date()) => {
   try {
@@ -26,10 +55,10 @@ export const calculateRollingMetrics = async (userId, days = 30, asOfDate = new 
       };
     }
     
-    if (snapshots.length < 7) {
+    if (snapshots.length < MIN_DAYS_FOR_ANALYTICS) {
       return {
         success: false,
-        message: `Insufficient data. Need at least 7 days, found ${snapshots.length}`
+        message: `Insufficient data. Need at least ${MIN_DAYS_FOR_ANALYTICS} days, found ${snapshots.length}`
       };
     }
     
@@ -75,21 +104,26 @@ export const calculateRollingMetrics = async (userId, days = 30, asOfDate = new 
     
     // ===== CALCULATE METRICS ===== ↓
     
-    // 1. Average daily return
+    // 1. Average daily return — simple mean of all daily % returns
     const avgDailyReturn = dailyReturns.reduce((sum, r) => sum + r, 0) / dailyReturns.length;
-    
-    // 2. Volatility (standard deviation)
+
+    // 2. Volatility — how spread out the returns are (standard deviation)
+    //    High variance = big swings both up and down = risky portfolio
+    //    dailyStdDev × √252 = annualised volatility (252 = trading days/year)
     const variance = dailyReturns.reduce((sum, r) => sum + Math.pow(r - avgDailyReturn, 2), 0) / dailyReturns.length;
     const dailyStdDev = Math.sqrt(variance);
-    const annualizedVolatility = dailyStdDev * Math.sqrt(252);
-    
-    // 3. Annualized return
-    const annualizedReturn = avgDailyReturn * 252;
-    
-    // 4. Sharpe Ratio
-    const riskFreeRate = 4.0;
-    const sharpeRatio = annualizedVolatility > 0 
-      ? (annualizedReturn - riskFreeRate) / annualizedVolatility 
+    const annualizedVolatility = dailyStdDev * Math.sqrt(TRADING_DAYS_PER_YEAR);
+
+    // 3. Annualised return — scale daily average to a full year
+    //    (simple scaling, not geometric — slight overestimate for high returns)
+    const annualizedReturn = avgDailyReturn * TRADING_DAYS_PER_YEAR;
+
+    // 4. Sharpe Ratio = (return above risk-free rate) / volatility
+    //    Answers: "How much EXTRA return am I getting per unit of risk?"
+    //    We subtract RISK_FREE_RATE (4%) because a bank FD gives that with zero risk
+    //    Sharpe > 1 means you're earning good return for the risk you're taking
+    const sharpeRatio = annualizedVolatility > 0
+      ? (annualizedReturn - RISK_FREE_RATE) / annualizedVolatility
       : 0;
     
     // 5. Return-based Max Drawdown
@@ -178,7 +212,29 @@ export const calculateRollingMetrics = async (userId, days = 30, asOfDate = new 
 };
 
 /**
- * Calculate correlation with NIFTY
+ * calculateCorrelationWithNifty
+ * -----------------------------
+ * Answers: "Does my portfolio move with the market, against it, or independently?"
+ *
+ * CORRELATION (Pearson coefficient, -1 to +1):
+ *   +1.0 = your portfolio moves exactly with NIFTY (you're basically holding NIFTY)
+ *    0.0 = no relationship (your portfolio is uncorrelated to market)
+ *   -1.0 = your portfolio moves opposite to NIFTY (perfect hedge)
+ *
+ * BETA (market sensitivity):
+ *   Beta = Cov(portfolio, NIFTY) / Var(NIFTY)
+ *   > 1.0 = your portfolio amplifies market moves (aggressive)
+ *   < 1.0 = your portfolio dampens market moves (defensive)
+ *   1.0   = moves exactly with market
+ *   e.g. Beta 1.3: if NIFTY drops 10%, your portfolio drops ~13%
+ *
+ * We use Pearson correlation formula:
+ *   r = Σ((xi - x̄)(yi - ȳ)) / √(Σ(xi-x̄)² × Σ(yi-ȳ)²)
+ *   where x = portfolio daily returns, y = NIFTY daily returns
+ *
+ * Beta = correlation × (stdDev_portfolio / stdDev_nifty)
+ *
+ * Requires at least 10 data points for statistical relevance.
  */
 export const calculateCorrelationWithNifty = async (userId, days = 30) => {
   try {

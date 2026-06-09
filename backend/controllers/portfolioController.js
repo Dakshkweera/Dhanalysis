@@ -2,7 +2,7 @@ import Investment from '../models/Investment.js';
 import User from '../models/User.js';
 import DailyReport from '../models/DailyReport.js';
 import MarketBenchmark from '../models/MarketBenchmark.js';
-import { getBatchStockPrices } from '../services/stockService.js';
+import { getMany as getPrices } from '../services/priceStoreService.js';
 import { 
   calculatePortfolioMetrics, 
   findTopPerformers 
@@ -103,7 +103,7 @@ export const getPortfolioSummary = async (req, res) => {
     // Fetch batch prices with error handling
     let priceMap = {};
     try {
-      priceMap = await getBatchStockPrices(symbols);
+      priceMap = await getPrices(symbols);
       console.log("8. Prices fetched:", Object.keys(priceMap).length);
       
       // Check if any prices were fetched
@@ -125,8 +125,7 @@ export const getPortfolioSummary = async (req, res) => {
     } catch (priceError) {
       console.error('❌ Error fetching prices:', priceError.message);
       
-      const errorResponse = handleYahooError(priceError, 'stock prices');
-      return sendErrorResponse(res, errorResponse, 503);
+      return res.status(503).json({ success: false, error: 'Unable to fetch stock prices. Please try again shortly.' });
     }
     
     // Calculate portfolio metrics
@@ -306,7 +305,7 @@ export const createDailySnapshot = async (req, res) => {
     
     // Get unique symbols and fetch batch prices
     const symbols = [...new Set(investments.map(inv => inv.symbol))];
-    const priceMap = await getBatchStockPrices(symbols);
+    const priceMap = await getPrices(symbols);
     
     // Calculate portfolio metrics
     const metrics = calculatePortfolioMetrics(
@@ -631,7 +630,7 @@ export const getPortfolioAllocation = async (req, res) => {
     const symbols = [...new Set(investments.map(inv => inv.symbol))];
     
     // Fetch current prices
-    const priceMap = await getBatchStockPrices(symbols);
+    const priceMap = await getPrices(symbols);
     
     // Fetch sectors (with caching)
     const sectorMap = await getBatchSectors(symbols);

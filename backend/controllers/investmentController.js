@@ -1,7 +1,9 @@
-import Investment from '../models/Investment.js';
-import User from '../models/User.js';
-import { getBatchStockPrices } from '../services/stockService.js';
-import { getNiftyForDate } from '../services/niftyService.js';
+import Investment    from '../models/Investment.js';
+import User          from '../models/User.js';
+import StockMetadata from '../models/StockMetadata.js';
+import { getMany as getPrices }             from '../services/priceStoreService.js';
+import { storeLastWeekSnapshots }           from '../services/backfillService.js';
+import { getPriceOnDate }                   from '../services/yahooFinanceService.js';
 import { handleDbError, sendErrorResponse } from '../utils/errorHandler.js';
 
 
@@ -9,12 +11,12 @@ export const addInvestment = async (req, res) => {
   try {
     const { userId, symbol, type, quantity, buyPrice, buyDate } = req.body;
 
-    // Validate inputs
-    if (!userId || !symbol || !type || !quantity || !buyPrice || !buyDate) {
+    // Basic field validation — buyPrice is optional (auto-fetched if not provided)
+    if (!userId || !symbol || !type || !quantity || !buyDate) {
       return res.status(400).json({ error: 'All fields are required' });
     }
-    if (quantity <= 0 || buyPrice <= 0) {
-      return res.status(400).json({ error: 'Quantity and price must be positive numbers' });
+    if (quantity <= 0) {
+      return res.status(400).json({ error: 'Quantity must be a positive number' });
     }
     const allowedTypes = ['Stock', 'ETF', 'Mutual Fund'];
     if (!allowedTypes.includes(type)) {
@@ -25,66 +27,83 @@ export const addInvestment = async (req, res) => {
       return res.status(400).json({ error: 'Invalid buy date' });
     }
 
-    // Check user existence
+    const cleanSymbol = symbol.toUpperCase().trim();
+
+    // ── Check user exists ────────────────────────────────────────────────────
     const user = await User.findOne({ uid: userId });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // ── Validate trading day + fetch buy price ───────────────────────────────
+    // Weekend check first (instant)
+    const dayOfWeek = parsedBuyDate.getUTCDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.status(400).json({
+        error: 'Markets are closed on weekends. Please select a weekday.',
+        code:  'NOT_TRADING_DAY',
+      });
+    }
 
+    // Fetch real price — also confirms it is a trading day
+    // If Yahoo has no price for this date it's a market holiday → reject
+    let realBuyPrice;
+    try {
+      realBuyPrice = await getPriceOnDate(cleanSymbol, parsedBuyDate);
+    } catch (err) {
+      if (err.code === 'NOT_TRADING_DAY') {
+        return res.status(400).json({
+          error: `${parsedBuyDate.toISOString().split('T')[0]} is a market holiday. Please select a trading day.`,
+          code:  'NOT_TRADING_DAY',
+        });
+      }
+      // Other error (network etc) — allow manual price if provided
+      realBuyPrice = buyPrice ? parseFloat(buyPrice) : null;
+    }
+
+    if (!realBuyPrice || realBuyPrice <= 0) {
+      return res.status(422).json({
+        error: 'Could not fetch price for this date. Please try another date.',
+      });
+    }
+
+    console.log(`💰 Buy price: ${cleanSymbol} on ${parsedBuyDate.toISOString().split('T')[0]} → ₹${realBuyPrice}`);
+
+    // ── Save investment with real price ──────────────────────────────────────
     const newInvestment = new Investment({
       userId,
-      symbol: symbol.toUpperCase().trim(),
+      symbol:      cleanSymbol,
       type,
       quantity,
-      buyPrice,
-      buyDate: parsedBuyDate,
-      isProcessed: false,  // ← Mark as unprocessed
-      processedAt: null
+      buyPrice:    realBuyPrice,
+      buyDate:     parsedBuyDate,
+      isProcessed: false,
+      processedAt: null,
     });
-
-    // Save investment
     await newInvestment.save();
 
-    // Update user's firstInvestmentDate if earlier or null
-    let firstInvestmentUpdated = false;
+    // Update user's firstInvestmentDate if this buy is earlier
     if (!user.firstInvestmentDate || parsedBuyDate < user.firstInvestmentDate) {
       user.firstInvestmentDate = parsedBuyDate;
       await user.save();
-      firstInvestmentUpdated = true;
-      console.log(`📅 Updated firstInvestmentDate to ${parsedBuyDate.toISOString().split('T')[0]}`);
+      console.log(`📅 firstInvestmentDate → ${parsedBuyDate.toISOString().split('T')[0]}`);
     }
 
-    // ========== NEW: Fetch NIFTY data for this date ========== ↓
-    
-    try {
-      console.log(`📊 Fetching NIFTY benchmark for investment date: ${parsedBuyDate.toISOString().split('T')[0]}`);
-      
-      await getNiftyForDate(parsedBuyDate);
-      
-      console.log(`✅ NIFTY data cached for ${parsedBuyDate.toISOString().split('T')[0]}`);
-      
-    } catch (niftyError) {
-      // Don't fail investment addition if NIFTY fetch fails
-      console.error(`⚠️ Could not fetch NIFTY data for ${parsedBuyDate.toISOString().split('T')[0]}:`, niftyError.message);
-      console.log('💡 Investment saved, but NIFTY data unavailable. Will retry on snapshot creation.');
-    }
-    
-    // ========== END NEW SECTION ========== ↑
+    // ── Respond immediately — backfill runs in background ────────────────────
+    res.status(201).json({
+      success:    true,
+      message:    'Investment added! Charts will update shortly.',
+      investment: newInvestment,
+    });
 
-    res.status(201).json({ 
-  message: 'Investment added', 
-  investment: newInvestment,
-  needsProcessing: true,
-  stockInfo: req.stockInfo,  // ← Populated by validation!
-  firstInvestmentUpdated: firstInvestmentUpdated
-});
-    
- } catch (error) {
-  console.error('❌ Error adding investment:', error);
-  
-  // Handle database errors specifically
-  const errorResponse = handleDbError(error);
-  return sendErrorResponse(res, errorResponse, 500);
-}
+    // ── Background: create historical snapshots ───────────────────────────────
+    storeLastWeekSnapshots(userId, parsedBuyDate).catch(err =>
+      console.error('Background backfill error:', err.message)
+    );
+
+  } catch (error) {
+    console.error('❌ Error adding investment:', error);
+    const errorResponse = handleDbError(error);
+    return sendErrorResponse(res, errorResponse, 500);
+  }
 };
 
 
@@ -104,7 +123,7 @@ export const getUserInvestments = async (req, res) => {
     const symbols = [...new Set(investments.map(inv => inv.symbol))];
 
     // Fetch latest prices for these symbols
-    const currentPrices = await getBatchStockPrices(symbols);
+    const currentPrices = await getPrices(symbols);
 
     // Enrich each investment with current price and calculations
     const enrichedInvestments = investments.map(inv => {
@@ -273,14 +292,22 @@ export const deleteInvestment = async (req, res) => {
       { firstInvestmentDate: newFirstInvestmentDate }
     );
     
-    // Return success response
+    // Clean up StockMetadata if no user anywhere still owns this symbol
+    const stillOwned = await Investment.countDocuments({
+      symbol: deletedInvestment.symbol
+    });
+    if (stillOwned === 0) {
+      await StockMetadata.deleteOne({ symbol: deletedInvestment.symbol });
+      console.log(`🗑  StockMetadata cleaned: ${deletedInvestment.symbol} (no owners left)`);
+    }
+
     res.status(200).json({
       message: 'Investment deleted successfully',
       deletedInvestment: {
-        symbol: deletedInvestment.symbol,
+        symbol:   deletedInvestment.symbol,
         quantity: deletedInvestment.quantity,
         buyPrice: deletedInvestment.buyPrice,
-        buyDate: deletedInvestment.buyDate
+        buyDate:  deletedInvestment.buyDate
       }
     });
     

@@ -1,47 +1,61 @@
 import express from 'express';
-import { addInvestment } from '../controllers/investmentController.js';
-import { getUserInvestments } from '../controllers/investmentController.js';
-import { editInvestment } from '../controllers/investmentController.js';
-import { deleteInvestment } from '../controllers/investmentController.js';
-import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
-import { validateInvestment, validateStockSymbol } from '../middleware/validation.js';
-import { validateUserId } from '../middleware/validation.js';
-import { generateHistoricalSnapshots } from '../services/batchSnapshotService.js';
-import { checkUnprocessedInvestments } from '../controllers/investmentController.js';
-
+import {
+  addInvestment,
+  getUserInvestments,
+  editInvestment,
+  deleteInvestment,
+  checkUnprocessedInvestments,
+} from '../controllers/investmentController.js';
+import { verifyFirebaseToken }                              from '../middleware/authMiddleware.js';
+import { validateInvestment, validateStockSymbol, validateUserId } from '../middleware/validation.js';
+import { demoProtect }                                      from '../middleware/demoProtect.js';
 
 const router = express.Router();
 
-// Protected route - user must be authenticated
-router.post('/add-investment', verifyFirebaseToken , validateInvestment,validateStockSymbol,addInvestment);
-router.get('/:userId', verifyFirebaseToken , validateUserId,getUserInvestments);
-router.put('/edit/:investmentId', verifyFirebaseToken , validateInvestment,validateStockSymbol, editInvestment);
-router.delete('/delete/:id', verifyFirebaseToken , deleteInvestment);
-router.post('/batch-process', async (req, res) => {
+// Read routes
+router.get('/:userId',             verifyFirebaseToken, validateUserId, getUserInvestments);
+router.get('/unprocessed/:userId', checkUnprocessedInvestments);
+
+// Export transactions as CSV
+router.get('/export/:userId', verifyFirebaseToken, async (req, res) => {
   try {
-    const { userId, force } = req.body;  // ✅ Add force parameter
-    
-    if (!userId) {
-      return res.status(400).json({ success: false, error: 'userId is required' });
+    const userId = req.user.uid;
+    const investments = await (await import('../models/Investment.js')).default
+      .find({ userId })
+      .sort({ buyDate: 1 });
+
+    if (!investments.length) {
+      return res.status(404).json({ error: 'No investments found' });
     }
-    
-    // ✅ Pass force option to service
-    const result = await generateHistoricalSnapshots(userId, { force });
-    
-    return res.status(200).json(result);
-    
-  } catch (error) {
-    console.error('Batch process error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: 'Batch processing failed',
-      details: error.message 
-    });
+
+    // Build CSV
+    const rows = [
+      ['Symbol', 'Type', 'Quantity', 'Buy Price (₹)', 'Buy Date', 'Total Invested (₹)'],
+      ...investments.map(inv => [
+        inv.symbol,
+        inv.type,
+        inv.quantity,
+        inv.buyPrice,
+        new Date(inv.buyDate).toISOString().split('T')[0],
+        (inv.quantity * inv.buyPrice).toFixed(2),
+      ])
+    ];
+
+    const csv = rows.map(r => r.join(',')).join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="dhanalysis-transactions.csv"');
+    res.send(csv);
+
+  } catch (err) {
+    console.error('Export error:', err);
+    res.status(500).json({ error: 'Export failed' });
   }
 });
 
-
-router.get('/unprocessed/:userId', checkUnprocessedInvestments);
+// Write routes — demo account blocked
+router.post('/add-investment',    verifyFirebaseToken, demoProtect, validateInvestment, validateStockSymbol, addInvestment);
+router.put('/edit/:investmentId', verifyFirebaseToken, demoProtect, validateInvestment, validateStockSymbol, editInvestment);
+router.delete('/delete/:id',      verifyFirebaseToken, demoProtect, deleteInvestment);
 
 export default router;
-

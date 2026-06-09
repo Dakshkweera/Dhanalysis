@@ -1,15 +1,19 @@
+// frontend/src/config/firebase.ts
+// Firebase web SDK — all credentials read from environment variables.
+// Never hardcode credentials in source code.
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBHWY4rIE8D_Xa7aheKb0EbBm2DeJt-8Lc",
-  authDomain: "dhanalysis-81762.firebaseapp.com",
-  projectId: "dhanalysis-81762",
-  storageBucket: "dhanalysis-81762.firebasestorage.app",
-  messagingSenderId: "516816780313",
-  appId: "1:516816780313:web:4ee12e8a40460773b3fe88"
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY             as string,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN         as string,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID          as string,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET      as string,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID              as string,
 };
 
 const app = initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
+export default app;

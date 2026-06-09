@@ -1,18 +1,11 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+import { fetchWithAuth } from '../utils/fetchWithAuth';
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('firebaseToken');
-  return {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-};
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export const portfolioAPI = {
   getSummary: async (userId: string) => {
-    const response = await fetch(`${API_BASE_URL}/portfolio/summary?userId=${userId}`, {
+    const response = await fetchWithAuth(`${API_BASE_URL}/portfolio/summary?userId=${userId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
     });
     const data = await response.json();
     if (!response.ok || data.error) {
@@ -22,9 +15,8 @@ export const portfolioAPI = {
   },
 
   getHistory: async (userId: string, days: number | string) => {
-    const response = await fetch(`${API_BASE_URL}/portfolio/history?userId=${userId}&days=${days}`, {
+    const response = await fetchWithAuth(`${API_BASE_URL}/portfolio/history?userId=${userId}&days=${days}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
     });
     const data = await response.json();
     if (!response.ok || data.error) {
