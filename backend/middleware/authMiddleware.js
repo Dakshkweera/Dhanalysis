@@ -1,12 +1,12 @@
 // backend/middleware/authMiddleware.js
-// JWT-based authentication middleware.
-// Verifies the access token from Authorization header.
-// Sets req.user = { uid, email } for downstream handlers.
+// JWT authentication middleware.
+// Reads Bearer token from Authorization header, verifies it,
+// and attaches req.user = { uid, email } for all downstream handlers.
 
 import jwt from 'jsonwebtoken';
 import config from '../config/env.js';
 
-export const verifyFirebaseToken = (req, res, next) => {
+export const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {

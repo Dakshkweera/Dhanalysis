@@ -2,10 +2,9 @@
 // Handles OTP send + verify for email verification during signup.
 //
 // Flow:
-//   1. POST /api/auth/send-otp   → generate OTP, hash it, store, send email
-//   2. POST /api/auth/verify-otp → compare hash, mark verified
-//   3. Frontend proceeds with Firebase createUserWithEmailAndPassword
-//   4. POST /api/users/create checks email is verified before saving user
+//   1. POST /api/auth/send-otp   → generate 6-digit OTP, SHA-256 hash it, store in MongoDB, send email
+//   2. POST /api/auth/verify-otp → hash the input and compare, mark email as verified
+//   3. POST /api/auth/register   → checks verified flag before creating the account
 
 import crypto from 'crypto';
 import OtpVerification from '../models/OtpVerification.js';

@@ -1,15 +1,16 @@
 // backend/routes/analyticsRoutes.js
+// Advanced analytics — rolling performance metrics and NIFTY correlation.
 
 import express from 'express';
 import { getRollingMetrics, getCorrelation } from '../controllers/analyticsController.js';
-import { verifyFirebaseToken } from '../middleware/authMiddleware.js';
+import { verifyToken }                       from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// GET /api/analytics/rolling-metrics?userId=X&days=30
-router.get('/rolling-metrics', verifyFirebaseToken, getRollingMetrics);
+// Rolling Sharpe ratio, volatility, and max drawdown over N days (?days=30)
+router.get('/rolling-metrics', verifyToken, getRollingMetrics);
 
-// GET /api/analytics/correlation?userId=X&days=30
-router.get('/correlation', verifyFirebaseToken, getCorrelation);
+// Pearson correlation between portfolio daily returns and NIFTY 50 (?days=30)
+router.get('/correlation', verifyToken, getCorrelation);
 
 export default router;

@@ -9,10 +9,11 @@ import { handleDbError, sendErrorResponse } from '../utils/errorHandler.js';
 
 export const addInvestment = async (req, res) => {
   try {
-    const { userId, symbol, type, quantity, buyPrice, buyDate } = req.body;
+    const userId = req.user.uid;
+    const { symbol, type, quantity, buyPrice, buyDate } = req.body;
 
     // Basic field validation — buyPrice is optional (auto-fetched if not provided)
-    if (!userId || !symbol || !type || !quantity || !buyDate) {
+    if (!symbol || !type || !quantity || !buyDate) {
       return res.status(400).json({ error: 'All fields are required' });
     }
     if (quantity <= 0) {
@@ -110,7 +111,7 @@ export const addInvestment = async (req, res) => {
 
 export const getUserInvestments = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.uid;
 
     // Fetch all investments, sorted by newest buyDate first
     const investments = await Investment.find({ userId }).sort({ buyDate: -1 });
@@ -166,8 +167,7 @@ export const editInvestment = async (req, res) => {
   try {
     const { investmentId } = req.params;
     const { quantity, buyPrice, buyDate } = req.body;
-    const userId = req.user.uid;  // from verifyFirebaseToken middleware
-    // const userId = req.body.userId;
+    const userId = req.user.uid;
 
     // Validate at least one field to update
     if (![quantity, buyPrice, buyDate].some(field => field !== undefined)) {
@@ -254,9 +254,7 @@ export const editInvestment = async (req, res) => {
 // DELETE investment by ID
 export const deleteInvestment = async (req, res) => {
   try {
-    // Get authenticated user's Firebase UID from middleware
-    // const userId = req.user.uid;
-    const userId = req.user?.uid || req.body.userId;
+    const userId = req.user.uid;
     
     // Get investment ID from URL parameter
     const { id } = req.params;
@@ -325,7 +323,7 @@ export const deleteInvestment = async (req, res) => {
 
 export const checkUnprocessedInvestments = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.uid;
 
     const unprocessedCount = await Investment.countDocuments({
       userId,

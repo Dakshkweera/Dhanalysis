@@ -20,7 +20,7 @@ export const apiLimiter = rateLimit({
 });
 
 /**
- * AI endpoint limiter — stricter, protects Perplexity API quota.
+ * AI endpoint limiter — stricter, protects Groq API quota.
  * 10 requests per hour per IP.
  */
 export const aiLimiter = rateLimit({

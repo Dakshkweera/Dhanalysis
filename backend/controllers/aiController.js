@@ -1,6 +1,7 @@
 // backend/controllers/aiController.js
-// AI chatbot powered by Perplexity. Assembles portfolio context by calling
-// service functions directly (no self-HTTP calls).
+// AI chatbot powered by Groq (llama-3.3-70b-versatile).
+// Assembles full portfolio context and passes it to the model so answers
+// are specific to the user's holdings — not generic financial advice.
 
 import axios from 'axios';
 import ChatHistory from '../models/ChatHistory.js';

@@ -5,7 +5,7 @@
 import config from '../config/env.js';
 
 export const demoProtect = (req, res, next) => {
-  // req.user.uid is set by verifyFirebaseToken middleware
+  // req.user.uid is set by verifyToken middleware
   if (req.user?.uid === config.DEMO_USER_ID) {
     return res.status(403).json({
       success: false,

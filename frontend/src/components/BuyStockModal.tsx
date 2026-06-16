@@ -75,7 +75,7 @@ function BuyStockModal({ isOpen, onClose, onSuccess }: BuyStockModalProps) {
 
       if (data.success || data.investment) {
         toast.success('Investment added! Charts updating... ✅');
-        setFormData({ symbol: '', type: 'Stock', quantity: '', buyDate: '' });
+        setFormData({ symbol: '', type: 'Stock', quantity: '', buyDate: '', buyPrice: '' });
         onClose();
         // Small delay for backfill to start, then refresh list
         setTimeout(() => onSuccess(), 1500);

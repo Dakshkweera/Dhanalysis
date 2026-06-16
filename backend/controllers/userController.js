@@ -1,23 +1,28 @@
+// backend/controllers/userController.js
+// Manages user profile — create, read, and update.
+// Note: account creation (register) lives in authController.js.
+// These endpoints handle onboarding profile fields set after signup.
 
 import User from '../models/User.js';
+
+// ── POST /api/users/create ────────────────────────────────────────────────────
+// Creates a user record if one doesn't already exist for this UID.
+// Called after registration to store onboarding fields (profession, goals, etc.)
 
 export const createUser = async (req, res) => {
   try {
     const { uid, email, name, profession, investmentGoals, riskAppetite, age, annualIncome, investmentExperience } = req.body;
 
-    // Basic validation
     if (!uid || !email) {
       return res.status(400).json({ error: 'UID and email are required' });
     }
 
-    // Check if user already exists
     let user = await User.findOne({ uid });
 
     if (!user) {
-      // Create new user with onboarding fields if provided
-      user = new User({ 
-        uid, 
-        email, 
+      user = new User({
+        uid,
+        email,
         name: name || 'User',
         profession: profession || null,
         investmentGoals: investmentGoals || null,
@@ -30,16 +35,16 @@ export const createUser = async (req, res) => {
       await user.save();
     }
 
-    // If user exists, consider updating onboarding fields separately (PUT /update-profile)
-
     return res.status(200).json({ message: 'User created or exists', user });
-    
+
   } catch (error) {
     console.error('User creation error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 };
 
+// ── PUT /api/users/update-profile ─────────────────────────────────────────────
+// Updates onboarding/profile fields for an existing user.
 
 export const updateUserProfile = async (req, res) => {
   try {
@@ -49,6 +54,10 @@ export const updateUserProfile = async (req, res) => {
 
     if (!uid) {
       return res.status(400).json({ error: 'UID is required' });
+    }
+
+    if (uid !== req.user.uid) {
+      return res.status(403).json({ error: 'Forbidden: cannot update another user\'s profile.' });
     }
 
     const user = await User.findOneAndUpdate(
@@ -68,6 +77,9 @@ export const updateUserProfile = async (req, res) => {
   }
 };
 
+// ── GET /api/users/:userId ────────────────────────────────────────────────────
+// Returns the public profile of a user by their UID.
+// Excludes sensitive fields (__v, timestamps, passwordHash).
 
 export const getUserProfile = async (req, res) => {
   try {
@@ -77,7 +89,7 @@ export const getUserProfile = async (req, res) => {
       return res.status(400).json({ success: false, error: 'UserId parameter is required' });
     }
 
-    const user = await User.findOne({ uid: userId }).select('-__v -createdAt -updatedAt');
+    const user = await User.findOne({ uid: userId }).select('-__v -createdAt -updatedAt -passwordHash');
 
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });

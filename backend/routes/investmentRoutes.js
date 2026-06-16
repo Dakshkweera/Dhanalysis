@@ -1,3 +1,7 @@
+// backend/routes/investmentRoutes.js
+// CRUD operations for a user's stock investments.
+// All write routes are blocked for the demo account (demoProtect).
+
 import express from 'express';
 import {
   addInvestment,
@@ -6,18 +10,20 @@ import {
   deleteInvestment,
   checkUnprocessedInvestments,
 } from '../controllers/investmentController.js';
-import { verifyFirebaseToken }                              from '../middleware/authMiddleware.js';
+import { verifyToken }                                         from '../middleware/authMiddleware.js';
 import { validateInvestment, validateStockSymbol, validateUserId } from '../middleware/validation.js';
-import { demoProtect }                                      from '../middleware/demoProtect.js';
+import { demoProtect }                                         from '../middleware/demoProtect.js';
 
 const router = express.Router();
 
-// Read routes
-router.get('/:userId',             verifyFirebaseToken, validateUserId, getUserInvestments);
-router.get('/unprocessed/:userId', checkUnprocessedInvestments);
+// Returns all investments for the authenticated user with live P&L
+router.get('/:userId', verifyToken, validateUserId, getUserInvestments);
 
-// Export transactions as CSV
-router.get('/export/:userId', verifyFirebaseToken, async (req, res) => {
+// Returns count of investments not yet backfilled with historical snapshots
+router.get('/unprocessed/:userId', verifyToken, checkUnprocessedInvestments);
+
+// Download all transactions as a CSV file
+router.get('/export/:userId', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid;
     const investments = await (await import('../models/Investment.js')).default
@@ -28,7 +34,6 @@ router.get('/export/:userId', verifyFirebaseToken, async (req, res) => {
       return res.status(404).json({ error: 'No investments found' });
     }
 
-    // Build CSV
     const rows = [
       ['Symbol', 'Type', 'Quantity', 'Buy Price (₹)', 'Buy Date', 'Total Invested (₹)'],
       ...investments.map(inv => [
@@ -42,7 +47,6 @@ router.get('/export/:userId', verifyFirebaseToken, async (req, res) => {
     ];
 
     const csv = rows.map(r => r.join(',')).join('\n');
-
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="dhanalysis-transactions.csv"');
     res.send(csv);
@@ -53,9 +57,13 @@ router.get('/export/:userId', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-// Write routes — demo account blocked
-router.post('/add-investment',    verifyFirebaseToken, demoProtect, validateInvestment, validateStockSymbol, addInvestment);
-router.put('/edit/:investmentId', verifyFirebaseToken, demoProtect, validateInvestment, validateStockSymbol, editInvestment);
-router.delete('/delete/:id',      verifyFirebaseToken, demoProtect, deleteInvestment);
+// Add a new investment (validates symbol, fetches historical price from Yahoo Finance)
+router.post('/add-investment', verifyToken, demoProtect, validateInvestment, validateStockSymbol, addInvestment);
+
+// Edit quantity, buy price, or buy date of an existing investment
+router.put('/edit/:investmentId', verifyToken, demoProtect, validateInvestment, validateStockSymbol, editInvestment);
+
+// Delete an investment by ID
+router.delete('/delete/:id', verifyToken, demoProtect, deleteInvestment);
 
 export default router;

@@ -1,19 +1,5 @@
 // frontend/src/config/firebase.ts
-// Firebase web SDK — all credentials read from environment variables.
-// Never hardcode credentials in source code.
-
-import { initializeApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
-
-const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY             as string,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN         as string,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID          as string,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET      as string,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID              as string,
-};
-
-const app = initializeApp(firebaseConfig);
-export const auth: Auth = getAuth(app);
-export default app;
+// NOTE: Firebase Auth has been replaced with custom JWT authentication.
+// This file is no longer used — kept only in case Firebase services
+// (e.g. push notifications, Firestore) are added in the future.
+// Auth is now handled by: src/context/AuthContext.tsx + backend/controllers/authController.js

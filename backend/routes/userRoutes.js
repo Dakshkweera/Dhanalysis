@@ -1,16 +1,12 @@
 // /routes/userRoutes.js
 import express from 'express';
-import { createUser } from '../controllers/userController.js';
-import { updateUserProfile } from '../controllers/userController.js';
-import { getUserProfile } from '../controllers/userController.js';
-
-
+import { createUser, updateUserProfile, getUserProfile } from '../controllers/userController.js';
+import { verifyToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Endpoint for creating user after Firebase signup/login
-router.post('/create', createUser);
-router.put('/update-profile', updateUserProfile);
-router.get('/:userId', getUserProfile); 
+router.post('/create',        verifyToken, createUser);
+router.put('/update-profile', verifyToken, updateUserProfile);
+router.get('/:userId',        verifyToken, getUserProfile);
 
 export default router;

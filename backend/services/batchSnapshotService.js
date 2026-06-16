@@ -1,4 +1,7 @@
 // backend/services/batchSnapshotService.js
+// Runs daily at 3:35 PM IST via cron to create portfolio snapshots for ALL users.
+// Fetches current prices in one batch, calculates metrics per user, and sends
+// email reports. This is the engine behind the daily portfolio email.
 
 import Investment from '../models/Investment.js';
 import DailyReport from '../models/DailyReport.js';

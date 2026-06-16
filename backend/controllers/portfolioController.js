@@ -24,17 +24,9 @@ import {
 export const getPortfolioSummary = async (req, res) => {
   try {
     
-    // Get userId from authenticated user (or body for testing)
     console.log("1. Portfolio summary started");
-    const userId = req.user?.uid || req.query.userId || req.body.userId;
+    const userId = req.user.uid;
     console.log("2. userId:", userId);
-    
-    if (!userId) {
-      return res.status(401).json({ 
-        success: false,
-        error: 'User ID not provided'
-      });
-    }
     
     console.log("3. Fetching user...");
     
@@ -228,7 +220,7 @@ export const getPortfolioSummary = async (req, res) => {
 
 export const createDailySnapshot = async (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.uid;
+    const userId = req.user.uid;
     
     if (!userId) {
       return res.status(400).json({ message: 'User ID required' });
@@ -433,15 +425,8 @@ export const createDailySnapshot = async (req, res) => {
 // Get portfolio history for charts
 export const getPortfolioHistory = async (req, res) => {
   try {
-    const { userId, days, startDate, endDate } = req.query;
-    
-    // Validate userId
-    if (!userId) {
-      return res.status(400).json({ 
-        success: false,
-        message: "userId is required" 
-      });
-    }
+    const userId = req.user.uid;
+    const { days, startDate, endDate } = req.query;
     
     // Build query
     let query = { userId };
@@ -605,15 +590,8 @@ export const getPortfolioHistory = async (req, res) => {
 // Get portfolio allocation (for pie chart)
 export const getPortfolioAllocation = async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'userId is required' 
-      });
-    }
-    
+    const userId = req.user.uid;
+
     console.log('📊 Calculating portfolio allocation for:', userId);
     
     // Get all investments
