@@ -3,7 +3,7 @@
 //
 // What it does:
 //   1. Checks StockMetadata cache — if TIME_SERIES_DAILY was fetched today, reuse it
-//   2. If not cached, calls Alpha Vantage TIME_SERIES_DAILY (1 call per symbol)
+//   2. If not cached, fetches from Yahoo Finance (1 call per symbol)
 //   3. Stores last 10 days of closing prices in StockMetadata.recentPrices
 //   4. Creates/updates DailyReport snapshots from buyDate to today for this user
 //

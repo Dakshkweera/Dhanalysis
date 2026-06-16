@@ -1,6 +1,5 @@
 // backend/routes/investmentRoutes.js
 // CRUD operations for a user's stock investments.
-// All write routes are blocked for the demo account (demoProtect).
 
 import express from 'express';
 import {
@@ -12,7 +11,6 @@ import {
 } from '../controllers/investmentController.js';
 import { verifyToken }                                         from '../middleware/authMiddleware.js';
 import { validateInvestment, validateStockSymbol, validateUserId } from '../middleware/validation.js';
-import { demoProtect }                                         from '../middleware/demoProtect.js';
 
 const router = express.Router();
 
@@ -58,12 +56,12 @@ router.get('/export/:userId', verifyToken, async (req, res) => {
 });
 
 // Add a new investment (validates symbol, fetches historical price from Yahoo Finance)
-router.post('/add-investment', verifyToken, demoProtect, validateInvestment, validateStockSymbol, addInvestment);
+router.post('/add-investment', verifyToken, validateInvestment, validateStockSymbol, addInvestment);
 
 // Edit quantity, buy price, or buy date of an existing investment
-router.put('/edit/:investmentId', verifyToken, demoProtect, validateInvestment, validateStockSymbol, editInvestment);
+router.put('/edit/:investmentId', verifyToken, validateInvestment, validateStockSymbol, editInvestment);
 
 // Delete an investment by ID
-router.delete('/delete/:id', verifyToken, demoProtect, deleteInvestment);
+router.delete('/delete/:id', verifyToken, deleteInvestment);
 
 export default router;

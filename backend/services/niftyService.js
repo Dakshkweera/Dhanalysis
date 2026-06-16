@@ -1,6 +1,5 @@
 // backend/services/niftyService.js
-// Fetches NIFTY 50 benchmark data via NIFTYBEES.BSE ETF on Alpha Vantage.
-// NIFTYBEES tracks NIFTY 50 with ~99.9% accuracy — same daily % change.
+// Fetches NIFTY 50 benchmark data via Yahoo Finance (^NSEI — direct NIFTY 50 index).
 
 import MarketBenchmark from '../models/MarketBenchmark.js';
 import { getStockQuote } from './yahooFinanceService.js';
@@ -52,7 +51,7 @@ export const getNiftyForDate = async (date) => {
       return existing;
     }
 
-    // Fetch fresh and persist
+      // Fetch fresh and persist
     const niftyData = await fetchNiftyValue();
 
     const benchmark = await MarketBenchmark.create({

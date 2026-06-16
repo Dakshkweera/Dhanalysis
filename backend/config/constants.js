@@ -36,14 +36,6 @@ export const AI_QUESTION_LIMIT_PREMIUM = -1; // -1 = unlimited
 // Cache
 export const PRICE_CACHE_TTL_MS = 30 * 60 * 1000;  // 30 minutes in ms
 
-// Alpha Vantage
-export const ALPHA_VANTAGE_DELAY_MS = 12000;         // 12s between calls = 5 req/min (their limit)
-export const MAX_REQUESTS_PER_KEY = 24;              // Stay under 25/day limit per key
-export const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
-
-// NIFTY benchmark proxy (Nippon India ETF — tracks NIFTY 50 with ~99.9% accuracy)
-export const NIFTY_PROXY_SYMBOL = 'NIFTYBEES.BSE';
-
 // Timezone
 export const IST_TIMEZONE = 'Asia/Kolkata';
 
@@ -55,7 +47,5 @@ export const ROLLING_WINDOW_30D = 30;
 export const ROLLING_WINDOW_90D = 90;
 export const ROLLING_WINDOW_180D = 180;
 
-// Free tier limits
-export const FREE_TIER_MAX_STOCKS     = 5;   // max unique symbols a free user can hold
-export const FREE_TIER_MAX_BUY_DAYS   = 7;   // how many days back a free user can enter buy date
+// Backfill
 export const BACKFILL_PRICE_DAYS      = 10;  // days to fetch from TIME_SERIES_DAILY (buffer for weekends)

@@ -10,7 +10,6 @@ import {
 } from '../controllers/portfolioController.js';
 import { verifyToken }                          from '../middleware/authMiddleware.js';
 import { validateUserId, validateDateRange }    from '../middleware/validation.js';
-import { demoProtect }                          from '../middleware/demoProtect.js';
 import DailyReport                              from '../models/DailyReport.js';
 
 const router = express.Router();
@@ -28,7 +27,7 @@ router.get('/history', verifyToken, validateUserId, validateDateRange, getPortfo
 router.get('/allocation', verifyToken, validateUserId, getPortfolioAllocation);
 
 // Deletes all daily snapshots for the authenticated user (used during dev/testing)
-router.delete('/history', verifyToken, demoProtect, async (req, res) => {
+router.delete('/history', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid;
     const result = await DailyReport.deleteMany({ userId });

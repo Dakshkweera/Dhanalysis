@@ -8,8 +8,6 @@ dotenv.config();
 const required = [
   'MONGO_URI',
   'CORS_ORIGINS',
-  'ALPHA_VANTAGE_KEY_1',
-  'DEMO_USER_ID',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
 ];
@@ -20,17 +18,6 @@ if (missing.length > 0) {
   console.error('   Copy .env.example to .env and fill in values, or set them in your host dashboard.');
   process.exit(1);
 }
-
-// Collect Alpha Vantage keys (1-5); skip undefined slots so fewer keys still work.
-const ALPHA_VANTAGE_KEYS = [
-  process.env.ALPHA_VANTAGE_KEY_1,
-  process.env.ALPHA_VANTAGE_KEY_2,
-  process.env.ALPHA_VANTAGE_KEY_3,
-  process.env.ALPHA_VANTAGE_KEY_4,
-  process.env.ALPHA_VANTAGE_KEY_5,
-  process.env.ALPHA_VANTAGE_KEY_6,
-  process.env.ALPHA_VANTAGE_KEY_7,
-].filter(Boolean);
 
 const CORS_ORIGINS = process.env.CORS_ORIGINS
   .split(',')
@@ -52,8 +39,6 @@ const config = {
     refreshExpiry: '7d',
   },
 
-  ALPHA_VANTAGE_KEYS,
-
   RESEND: {
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_FROM,
@@ -65,10 +50,8 @@ const config = {
 
   GMAIL_USER: process.env.GMAIL_USER || '',
   GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD || '',
-
-  DEMO_USER_ID: process.env.DEMO_USER_ID,
 };
 
-console.log(`✅ Env validated (${config.NODE_ENV}, ${ALPHA_VANTAGE_KEYS.length} Alpha Vantage key(s))`);
+console.log(`✅ Env validated (${config.NODE_ENV})`);
 
 export default config;
