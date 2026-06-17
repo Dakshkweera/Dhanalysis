@@ -164,7 +164,7 @@ export const calculateStockPerformance = (investments, todayPrices, yesterdaySto
 };
 
 /**
- * calculateCAGR (standalone — used by batchSnapshotService)
+ * calculateCAGR (standalone)
  * ----------------------------------------------------------
  * Compound Annual Growth Rate: what annualised % return did you earn?
  *
