@@ -131,6 +131,10 @@ export const bulkRefresh = async (symbols) => {
 // ── Internal ──────────────────────────────────────────────────────────────────
 
 async function _upsertPrice(symbol, quoteOrPartial) {
+  const dateStr = quoteOrPartial.latestTradingDay
+    ? new Date(quoteOrPartial.latestTradingDay).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0];
+
   await StockMetadata.findOneAndUpdate(
     { symbol: symbol.toUpperCase() },
     {
@@ -143,6 +147,7 @@ async function _upsertPrice(symbol, quoteOrPartial) {
           ? new Date(quoteOrPartial.latestTradingDay)
           : getISTDate(),
         lastFetchedAt: new Date(),
+        [`priceHistory.${dateStr}`]: quoteOrPartial.price,
       },
     },
     { upsert: true, new: true }

@@ -52,9 +52,13 @@ const fetchChart = async (symbol, params = {}) => {
 
 const saveToCache = async (symbol, prices) => {
   try {
+    const updates = { priceHistoryUpdatedAt: new Date() };
+    for (const [date, price] of Object.entries(prices)) {
+      updates[`priceHistory.${date}`] = price;
+    }
     await StockMetadata.findOneAndUpdate(
       { symbol: symbol.toUpperCase() },
-      { $set: { recentPrices: prices, recentPricesFetchedAt: new Date() } },
+      { $set: updates },
       { upsert: true }
     );
   } catch (err) {
@@ -170,10 +174,14 @@ export const getBatchStockPrices = async (symbols) => {
 };
 
 /**
- * fetchDailyTimeSeries — recent prices for backfill (last 15 trading days).
+ * fetchPriceRange — closing prices for a symbol over an exact date range.
+ * Used by backfillService to fetch from buy date to today in one API call.
  */
-export const fetchDailyTimeSeries = async (symbol) => {
-  const result     = await fetchChart(symbol, { interval: '1d', range: '1mo' });
+export const fetchPriceRange = async (symbol, fromDate, toDate) => {
+  const period1 = Math.floor(new Date(fromDate).getTime() / 1000);
+  const period2 = Math.floor(new Date(toDate).getTime() / 1000) + 86400;
+
+  const result     = await fetchChart(symbol, { interval: '1d', period1, period2 });
   const timestamps = result.timestamp || [];
   const closes     = result.indicators?.quote?.[0]?.close || [];
 
@@ -181,8 +189,8 @@ export const fetchDailyTimeSeries = async (symbol) => {
   for (let i = 0; i < timestamps.length; i++) {
     const close = closes[i];
     if (close && !isNaN(close)) {
-      const d       = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
-      prices[d]     = parseFloat(close.toFixed(2));
+      const d   = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+      prices[d] = parseFloat(close.toFixed(2));
     }
   }
 

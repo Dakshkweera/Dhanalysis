@@ -29,11 +29,11 @@ const stockMetadataSchema = new mongoose.Schema(
     priceDate:     { type: Date,   default: null },   // Date the price was fetched for
     lastFetchedAt: { type: Date,   default: null },   // Wall-clock time of last fetch
 
-    // Recent daily prices (written by backfillService after TIME_SERIES_DAILY call)
-    // { '2026-06-05': 1291.50, '2026-06-04': 1285.00, ... }
-    // Cached for the day — any user adding this symbol reuses it, no duplicate API calls
-    recentPrices:          { type: mongoose.Schema.Types.Mixed, default: null },
-    recentPricesFetchedAt: { type: Date, default: null },
+    // Historical daily prices — shared across all users, grows automatically
+    // Backfill writes full range (buyDate → today). Cron appends today's price daily.
+    // { '2026-03-01': 1250.50, '2026-03-03': 1265.00, ... }
+    priceHistory:          { type: mongoose.Schema.Types.Mixed, default: {} },
+    priceHistoryUpdatedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

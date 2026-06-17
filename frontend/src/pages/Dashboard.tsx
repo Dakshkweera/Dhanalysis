@@ -176,10 +176,15 @@ function Dashboard() {
       
       setChartData(formattedData);
 
-      // Your Return = last snapshot ROI (total return on all invested capital)
-      // Simple and honest: how much % profit/loss on everything you put in
-      const lastSnapshot = data.data[data.data.length - 1];
-      const portfolioReturn = lastSnapshot.roi ?? 0;
+      // Your Return = how much P&L changed over this period as % of total capital invested
+      // pnlChange = pure market movement (excludes new capital added)
+      // denominator = total invested at end — stable base, avoids extreme % when period starts small
+      const firstSnapshot   = data.data[0];
+      const lastSnapshot    = data.data[data.data.length - 1];
+      const pnlChange       = (lastSnapshot.profitLoss ?? 0) - (firstSnapshot.profitLoss ?? 0);
+      const portfolioReturn = (lastSnapshot.totalInvested ?? 0) > 0
+        ? (pnlChange / lastSnapshot.totalInvested) * 100
+        : 0;
 
       console.log('Portfolio Return:', portfolioReturn.toFixed(2) + '%');
 
