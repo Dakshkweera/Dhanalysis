@@ -55,19 +55,27 @@ export const storeLastWeekSnapshots = async (userId, newBuyDate) => {
     // symbolPriceMap: { 'TCS.NS': { '2026-03-01': 1250.50, ... } }
     const symbolPriceMap = {};
 
+    const fiveDaysAgo    = new Date(today);
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    const fiveDaysAgoStr = fiveDaysAgo.toISOString().split('T')[0];
+
     for (const symbol of uniqueSymbols) {
       const meta          = await StockMetadata.findOne({ symbol: symbol.toUpperCase() }).select('priceHistory');
       const cached        = meta?.priceHistory || {};
       const cachedDates   = Object.keys(cached).sort();
       const earliestCached = cachedDates[0];
-
-      // Cache is valid only if it covers BOTH the buy date AND recent data.
-      // 5-day gap allowed for weekends/holidays.
       const latestCached   = cachedDates[cachedDates.length - 1];
-      const fiveDaysAgo    = new Date(today);
-      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-      const fiveDaysAgoStr = fiveDaysAgo.toISOString().split('T')[0];
-      const cacheValid     = earliestCached && newBuyDateStr >= earliestCached && latestCached >= fiveDaysAgoStr;
+
+      // Use this symbol's OWN earliest buy date — not the newly added stock's buy date
+      // TCS bought Jan 1 should not be refetched just because new stock was bought Dec 1
+      const symbolBuyDateStr = investments
+        .filter(inv => inv.symbol === symbol)
+        .map(inv => inv.buyDate.toISOString().split('T')[0])
+        .sort()[0];
+
+      const cacheValid = earliestCached
+        && symbolBuyDateStr >= earliestCached   // cache covers this symbol's own buy date
+        && latestCached >= fiveDaysAgoStr;       // cache has recent data
 
       if (cacheValid) {
         // Cache covers both the buy date and recent data — use directly, zero API call
@@ -77,7 +85,7 @@ export const storeLastWeekSnapshots = async (userId, newBuyDate) => {
         // Cache missing or doesn't go back far enough — fetch full range
         try {
           await delay(YAHOO_DELAY_MS);
-          const freshPrices = await fetchPriceRange(symbol, newBuyDate, today);
+          const freshPrices = await fetchPriceRange(symbol, new Date(symbolBuyDateStr), today);
 
           // Overwrite priceHistory with new full range (wider than before)
           await StockMetadata.findOneAndUpdate(
@@ -156,21 +164,22 @@ export const storeLastWeekSnapshots = async (userId, newBuyDate) => {
     const deleted = await DailyReport.deleteMany({ userId, date: { $gte: newBuyDateObj } });
     console.log(`🗑  Deleted ${deleted.deletedCount} DailyReports from ${newBuyDateStr} onwards`);
 
-    // 4. Get all trading dates from price data
-    const baseSymbol = uniqueSymbols.find(s => Object.keys(symbolPriceMap[s] || {}).length > 0);
-    if (!baseSymbol) {
-      console.warn('⚠️  No price data available. Backfill skipped.');
+    // 4. Get trading days from the newly added stock's price data
+    // The new investment (isProcessed=false, buyDate=newBuyDate) caused this backfill
+    // Its priceHistory is guaranteed to cover newBuyDate → today — use it as the calendar
+    const newInvestment = investments.find(inv =>
+      inv.buyDate.toISOString().split('T')[0] === newBuyDateStr && !inv.isProcessed
+    );
+    const newSymbol = newInvestment?.symbol;
+
+    if (!newSymbol || !symbolPriceMap[newSymbol] || !Object.keys(symbolPriceMap[newSymbol]).length) {
+      console.warn('⚠️  No price data for newly added stock. Backfill skipped.');
       return;
     }
 
-    const daysToFill = Object.keys(symbolPriceMap[baseSymbol])
+    const daysToFill = Object.keys(symbolPriceMap[newSymbol])
       .filter(d => d >= newBuyDateStr)
       .sort();
-
-    if (!daysToFill.length) {
-      console.warn(`⚠️  No dates >= ${newBuyDateStr} in price data. Backfill skipped.`);
-      return;
-    }
 
     console.log(`📅 Filling ${daysToFill.length} day(s): ${daysToFill[0]} → ${daysToFill[daysToFill.length - 1]}`);
 
