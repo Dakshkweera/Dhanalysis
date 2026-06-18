@@ -195,7 +195,6 @@ export const editInvestment = async (req, res) => {
       return res.status(404).json({ error: 'Investment not found or access denied.' });
     }
 
-    // Store old buyDate for later comparison
     const oldBuyDate = investment.buyDate;
 
     // Handle quantity update
@@ -223,21 +222,6 @@ export const editInvestment = async (req, res) => {
     if (buyDate !== undefined) investment.buyDate = new Date(buyDate);
 
     await investment.save();
-
-    // Update user's firstInvestmentDate if buyDate was changed
-    if (buyDate !== undefined) {
-      const user = await User.findOne({ uid: userId });
-
-      if (
-        !user.firstInvestmentDate ||
-        investment.buyDate < user.firstInvestmentDate ||
-        oldBuyDate.getTime() === user.firstInvestmentDate.getTime()
-      ) {
-        const earliestInvestment = await Investment.findOne({ userId }).sort({ buyDate: 1 }).limit(1);
-        user.firstInvestmentDate = earliestInvestment ? earliestInvestment.buyDate : null;
-        await user.save();
-      }
-    }
 
     return res.status(200).json({ message: 'Investment updated successfully', investment });
   } catch (error) {
@@ -316,33 +300,4 @@ export const deleteInvestment = async (req, res) => {
   return sendErrorResponse(res, errorResponse, 500);
 }
 
-};
-
-
-// controllers/investmentController.js
-
-export const checkUnprocessedInvestments = async (req, res) => {
-  try {
-    const userId = req.user.uid;
-
-    const unprocessedCount = await Investment.countDocuments({
-      userId,
-      isProcessed: false
-    });
-
-    const hasUnprocessed = unprocessedCount > 0;
-
-    return res.status(200).json({
-      success: true,
-      hasUnprocessed,
-      unprocessedCount
-    });
-
-  } catch (error) {
-    console.error('Error checking unprocessed investments:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
 };

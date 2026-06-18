@@ -7,7 +7,6 @@ import {
   getUserInvestments,
   editInvestment,
   deleteInvestment,
-  checkUnprocessedInvestments,
 } from '../controllers/investmentController.js';
 import { verifyToken }                                         from '../middleware/authMiddleware.js';
 import { validateInvestment, validateStockSymbol, validateUserId } from '../middleware/validation.js';
@@ -16,9 +15,6 @@ const router = express.Router();
 
 // Returns all investments for the authenticated user with live P&L
 router.get('/:userId', verifyToken, validateUserId, getUserInvestments);
-
-// Returns count of investments not yet backfilled with historical snapshots
-router.get('/unprocessed/:userId', verifyToken, checkUnprocessedInvestments);
 
 // Download all transactions as a CSV file
 router.get('/export/:userId', verifyToken, async (req, res) => {

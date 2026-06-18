@@ -26,7 +26,7 @@ router.get('/history', verifyToken, validateUserId, validateDateRange, getPortfo
 // Returns portfolio allocation by stock and sector (for pie charts)
 router.get('/allocation', verifyToken, validateUserId, getPortfolioAllocation);
 
-// Deletes all daily snapshots for the authenticated user (used during dev/testing)
+// Deletes all daily snapshots for the authenticated user (Settings page — "Delete Portfolio History")
 router.delete('/history', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid;

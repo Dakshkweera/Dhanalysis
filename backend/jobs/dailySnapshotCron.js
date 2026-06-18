@@ -226,5 +226,3 @@ export const startDailySnapshotCron = () => {
   console.log(`✅ Cron scheduled: 3:35 PM IST (Mon-Fri)`);
 };
 
-// For manual trigger via API (useful for testing on Render)
-export const triggerManualSnapshot = runDailyJob;

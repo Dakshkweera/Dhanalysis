@@ -215,19 +215,3 @@ export const sendPortfolioEmail = async (userEmail, userName, snapshot) => {
     return { success: false, error: err.message };
   }
 };
-
-// ── Send test email (used by /api/dev/test-email) ─────────────────────────────
-
-export const sendTestEmail = async (toEmail) => {
-  try {
-    await transporter.sendMail({
-      from:    `${config.EMAIL_FROM_NAME || 'Dhanalysis'} <${config.GMAIL_USER}>`,
-      to:      toEmail,
-      subject: '🧪 Dhanalysis — Email test',
-      html:    '<p style="font-family:sans-serif;">If you received this, <strong>Gmail SMTP</strong> is configured correctly. ✅</p>',
-    });
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-};
