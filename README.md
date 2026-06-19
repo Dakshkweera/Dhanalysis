@@ -10,20 +10,74 @@ A full-stack portfolio analytics platform for Indian retail investors. Add your 
 
 ```mermaid
 graph LR
-    U([User]) --> FE["React\nFrontend"]
-    FE -->|REST API + JWT| BE["Express\nBackend"]
-    BE --> MG[("MongoDB\nAtlas")]
-    BE --> YF["Yahoo Finance\nUndocumented API"]
-    BE --> GR["Groq API\nllama-3.3-70b"]
-    BE --> EM["Email\nService"]
-    CR["node-cron\n3:35 PM IST"] --> BE
+    U([User / Browser])
+
+    subgraph FE ["React Frontend"]
+        direction TB
+        AC["AuthContext\nsilent refresh 2 min before expiry\nauto-retry on 401"]
+        PG["Pages\nDashboard · Investments · Reports\nAI Insights · Settings"]
+        AC --> PG
+    end
+
+    subgraph BE ["Express Backend — server.js"]
+        direction TB
+        RL["Rate Limiter\napiLimiter · aiLimiter · authLimiter"]
+        VM["verifyToken middleware\njwt.verify → attaches req.user.uid"]
+        CT["Controllers\nauth · portfolio · investment\nai · analytics · user · market"]
+        SV["Services\nportfolioService · metricsCalculator\nxirrService · niftyService · sectorService"]
+        RL --> VM --> CT --> SV
+    end
+
+    subgraph PS ["Price Store — 3 tier lookup"]
+        direction TB
+        IC["In-Memory Cache\nsub-millisecond"]
+        SM[("StockMetadata\nMongoDB")]
+        YF["Yahoo Finance\nfake Chrome headers\n12s delay between calls"]
+        IC -->|miss| SM -->|miss| YF
+    end
+
+    subgraph DB ["MongoDB Atlas"]
+        direction TB
+        U1[("User\nInvestment\nOtpVerification")]
+        U2[("DailyReport\nChatHistory\nUsageLimit\nMarketBenchmark")]
+    end
+
+    subgraph CRON ["Cron Job — node-cron 3:35 PM IST Mon–Fri"]
+        direction TB
+        DD["Collect all users' symbols\ndeduplicate with Set()\n75% fewer API calls"]
+        BR["bulkRefresh — sequential fetch\nwrites MongoDB + warms cache"]
+        SN["createSnapshot per user\nsequential — P&L · XIRR · Drawdown\ncash-flow-free dailyReturn · NIFTY benchmark"]
+        ML["Promise.allSettled\nparallel emails — one fail\ndoes not stop others"]
+        DD --> BR --> SN --> ML
+    end
+
+    subgraph EXT ["External APIs"]
+        GR["Groq API\nllama-3.3-70b-versatile\ntemp 0.3"]
+        EM["Email Service\nNodemailer"]
+    end
+
+    U -->|"visits page"| FE
+    FE -->|"Authorization: Bearer accessToken\nHttpOnly cookie for /auth/refresh"| RL
+    CT --> PS
+    CT --> DB
+    CT --> GR
+    ML --> EM
+    BR --> YF
+    BR --> SM
+    BR --> IC
+    SN --> DB
+    CT -->|"JSON response"| FE
+    FE -->|"renders data"| U
 
     style BE fill:#1e3a8a,color:#fff,stroke:#3b82f6
-    style MG fill:#14532d,color:#fff,stroke:#22c55e
+    style DB fill:#14532d,color:#fff,stroke:#22c55e
     style YF fill:#7c2d12,color:#fff,stroke:#f97316
     style GR fill:#581c87,color:#fff,stroke:#a855f7
-    style CR fill:#1e293b,color:#fff,stroke:#64748b
+    style CRON fill:#1e293b,color:#fff,stroke:#64748b
     style EM fill:#065f46,color:#fff,stroke:#10b981
+    style PS fill:#1c1917,color:#fff,stroke:#78716c
+    style FE fill:#0c4a6e,color:#fff,stroke:#0284c7
+    style EXT fill:#3b0764,color:#fff,stroke:#9333ea
 ```
 
 ### Daily Snapshot Flow (Cron at 3:35 PM IST)
