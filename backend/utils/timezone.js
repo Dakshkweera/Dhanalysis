@@ -4,11 +4,11 @@
 
 import { IST_TIMEZONE } from '../config/constants.js';
 
-/**
- * Returns today's date as a UTC midnight Date object, calculated in IST.
- * e.g. if it's 11 PM UTC on Jan 14 (which is 4:30 AM IST Jan 15),
- * this returns 2024-01-15T00:00:00.000Z
- */
+// 1. Finds today's date according to India (IST).
+// 2. Extracts only year, month, and day.
+// 3. Removes the time portion completely.
+// 4. Returns that date as UTC midnight.
+
 export const getISTDate = () => {
   const now = new Date();
 

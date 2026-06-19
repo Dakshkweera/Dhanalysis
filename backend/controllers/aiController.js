@@ -300,6 +300,16 @@ export async function handleChat(req, res) {
       month:      getCurrentMonth(),
     }).save();
 
+    // Keep only last 5 conversations — delete oldest beyond that
+    const totalCount = await ChatHistory.countDocuments({ userId });
+    if (totalCount > 5) {
+      const oldest = await ChatHistory.find({ userId })
+        .sort({ timestamp: 1 })
+        .limit(totalCount - 5)
+        .select('_id');
+      await ChatHistory.deleteMany({ _id: { $in: oldest.map(d => d._id) } });
+    }
+
     const updatedUsage = await checkUsageLimit(userId);
 
     return res.json({
@@ -332,10 +342,9 @@ export async function getChatHistory(req, res) {
       return res.status(403).json({ success: false, message: 'Forbidden.' });
     }
 
-    const limit = parseInt(req.query.limit) || 20;
     const history = await ChatHistory.find({ userId: req.params.userId })
       .sort({ timestamp: -1 })
-      .limit(limit)
+      .limit(5)
       .select('question answer sources timestamp');
 
     return res.json({ success: true, count: history.length, conversations: history });
